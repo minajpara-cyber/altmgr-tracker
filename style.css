@@ -180,6 +180,21 @@ h3 { font-size: 13px; color: var(--text-dim); }
 .compare-side h3 { margin-top: 12px; }
 .compare-side h3:first-child { margin-top: 0; }
 
+.unit-toggle {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt, #fafafa);
+  border-radius: 2px;
+}
+.unit-toggle label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.unit-toggle input { margin: 0; }
+.unit-toggle.locked { opacity: 0.45; cursor: not-allowed; }
+.unit-toggle.locked label { cursor: not-allowed; }
+
 .chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .chip {
   font-size: 10px;
@@ -320,3 +335,127 @@ footer.sitefoot {
   .compare-layout { grid-template-columns: 1fr; }
   .compare-side { position: static; max-height: none; }
 }
+
+/* ------------------------------------------------------------------ */
+/* Transposed quarterly table (fund.html, compare.html)               */
+/* ------------------------------------------------------------------ */
+.section-title {
+  margin-top: 30px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.legend-chip { display: inline-flex; align-items: center; gap: 6px; }
+.legend-chip .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend-q       { background: var(--accent-blue); }
+.legend-derived { background: var(--accent); }
+.legend-h       { background: #7b3f99; }
+
+.qtable-wrap {
+  border: 1px solid var(--border-strong);
+  background: white;
+  overflow-x: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+table.qtable {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 100%;
+  background: white;
+}
+
+table.qtable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border);
+  padding: 6px 9px;
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: right;
+  z-index: 2;
+  color: var(--text);
+}
+table.qtable thead th.row-label {
+  text-align: left;
+  left: 0;
+  z-index: 4;
+  background: var(--bg-panel);
+  min-width: 230px;
+  border-right: 2px solid var(--border-strong);
+}
+table.qtable thead th.qhead-sub,
+table.qtable thead th .qhead-sub {
+  font-weight: 400;
+  font-size: 9px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+table.qtable thead th.qhead.derived  { color: var(--accent); border-bottom-color: var(--accent); }
+table.qtable thead th.qhead.semi     { color: #7b3f99; border-bottom-color: #7b3f99; }
+table.qtable thead th.qhead.annual   { color: #7b3f99; border-bottom-color: #7b3f99; }
+
+table.qtable tbody tr.section-row td {
+  background: var(--bg-alt);
+  font-weight: 700;
+  font-family: var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  position: sticky;
+  left: 0;
+}
+
+table.qtable tbody td {
+  padding: 4px 9px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  text-align: right;
+}
+table.qtable tbody td.row-label {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: white;
+  z-index: 1;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text);
+  border-right: 2px solid var(--border-strong);
+  min-width: 230px;
+}
+table.qtable tbody tr:hover td:not(.row-label) { background: var(--row-hover); }
+table.qtable tbody tr:hover td.row-label { background: var(--accent-soft); }
+
+table.qtable td.val { font-variant-numeric: tabular-nums; }
+table.qtable td.val.pos  { color: var(--text); }
+table.qtable td.val.neg  { color: var(--neg); }
+table.qtable td.val.zero { color: var(--text-faint); }
+table.qtable td.val.derived { background: rgba(196, 122, 0, 0.06); }
+

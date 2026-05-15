@@ -1,37 +1,43 @@
-/* Alt-Manager Tracker — shared client code */
+/* Alt-Manager Tracker — shared client code (quarterly redesign) */
 
 const DATA_URL = './data.json';
 
 // ---------- formatters ----------
-function fmtMoney(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
-  const abs = Math.abs(v);
-  const sign = v < 0 ? '-' : '';
-  if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
-  if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
-  if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
-  return sign + '$' + abs.toFixed(0);
+// Money in $ MILLIONS only. Negatives parenthesized.
+function fmtM(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const m = v / 1e6;
+  const abs = Math.abs(m);
+  let body;
+  if (abs >= 1000) body = '$' + abs.toLocaleString('en-US', { maximumFractionDigits: 0 }) + 'M';
+  else if (abs >= 100) body = '$' + abs.toFixed(0) + 'M';
+  else if (abs >= 10) body = '$' + abs.toFixed(1) + 'M';
+  else body = '$' + abs.toFixed(2) + 'M';
+  return v < 0 ? '(' + body + ')' : body;
 }
 
-function fmtMoneySigned(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
-  const s = fmtMoney(v);
-  return v > 0 ? '+' + s : s;
+// Backwards-compat alias for any code that still calls fmtMoney.
+function fmtMoney(v) { return fmtM(v); }
+
+function fmtMSigned(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  if (v < 0) return fmtM(v); // already parenthesized
+  return '+' + fmtM(v);
 }
 
 function fmtPct(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
   return (v * 100).toFixed(1) + '%';
 }
 
 function fmtPctSigned(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
   const s = (v * 100).toFixed(1) + '%';
   return v > 0 ? '+' + s : s;
 }
 
 function fmtInt(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
   return v.toLocaleString();
 }
 
@@ -40,29 +46,12 @@ function fmtDate(v) {
   return v.substring(0, 10);
 }
 
-// Tabulator cell formatters
-function moneyCell(cell) {
-  const v = cell.getValue();
-  return fmtMoney(v);
-}
-function moneySignedCell(cell) {
-  const v = cell.getValue();
-  const el = document.createElement('span');
-  el.textContent = fmtMoneySigned(v);
-  if (v > 0) el.className = 'pos';
-  else if (v < 0) el.className = 'neg';
-  return el;
-}
-function pctCell(cell) {
-  return fmtPct(cell.getValue());
-}
-function pctSignedCell(cell) {
-  const v = cell.getValue();
-  const el = document.createElement('span');
-  el.textContent = fmtPctSigned(v);
-  if (v > 0) el.className = 'pos';
-  else if (v < 0) el.className = 'neg';
-  return el;
+// Color class for a numeric cell value
+function signClass(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return 'zero';
+  if (v > 0) return 'pos';
+  if (v < 0) return 'neg';
+  return 'zero';
 }
 
 // ---------- data loader ----------
@@ -86,27 +75,34 @@ async function paintRefreshDate() {
   try {
     const d = await loadData();
     const el = document.getElementById('refresh-meta');
-    if (el) {
-      el.textContent = 'Data through ' + fmtDate(d.data_through);
-    }
-  } catch { /* already surfaced */ }
+    if (el) el.textContent = 'Data through ' + fmtDate(d.data_through);
+  } catch { /* surfaced above */ }
 }
 
 // ---------- helpers ----------
-function groupByTicker(filings) {
+function quarterSortKey(label) {
+  // "Q1 2024", "H1 2024", "FY 2024"
+  const parts = (label || '').split(' ');
+  const year = parseInt(parts[parts.length - 1], 10) || 0;
+  const prefix = parts[0] || '';
+  const order = { Q1: 1, Q2: 2, Q3: 3, Q4: 4, H1: 1, H2: 2, FY: 5 };
+  const oi = order[prefix] || 9;
+  return year * 10 + oi;
+}
+
+function groupQuartersByTicker(quarters) {
   const m = new Map();
-  for (const f of filings) {
-    if (!m.has(f.ticker)) m.set(f.ticker, []);
-    m.get(f.ticker).push(f);
+  for (const q of quarters) {
+    if (!m.has(q.ticker)) m.set(q.ticker, []);
+    m.get(q.ticker).push(q);
   }
   for (const arr of m.values()) {
-    arr.sort((a, b) => (a.filing_date || '').localeCompare(b.filing_date || ''));
+    arr.sort((a, b) => quarterSortKey(a.quarter_label) - quarterSortKey(b.quarter_label));
   }
   return m;
 }
 
 function colorPalette(n) {
-  // 30 distinguishable colors (categorical)
   const base = [
     '#1f5fa6', '#c47a00', '#2c9f3a', '#c0392b', '#7b3f99',
     '#0e7c86', '#d35400', '#16a085', '#8e44ad', '#2e4053',

@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <title>Fund detail — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -23,11 +22,9 @@
 </main>
 
 <footer class="sitefoot">
-  Data extracted from SEC EDGAR. Values in actual dollars.
+  Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. All dollar values in millions.
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="./app.js"></script>
 <script>
 (async function() {
@@ -45,28 +42,41 @@
   let data;
   try { data = await loadData(); } catch { return; }
   const universe = data.universe.find(u => u.ticker === ticker);
-  const filings = data.filings.filter(f => f.ticker === ticker).sort((a,b) => (a.filing_date || '').localeCompare(b.filing_date || ''));
+  const quartersAll = data.quarters || [];
+  const quarters = quartersAll
+    .filter(q => q.ticker === ticker)
+    .sort((a, b) => quarterSortKey(a.quarter_label) - quarterSortKey(b.quarter_label));
 
   if (!universe) {
     root.className = '';
     root.innerHTML = `<div class="error-msg">Ticker <b>${ticker}</b> not found in universe.</div>`;
     return;
   }
-  if (!filings.length) {
+  if (!quarters.length) {
     root.className = '';
-    root.innerHTML = `<div class="fund-header"><div class="name-row"><span class="ticker-badge">${ticker}</span><h1>${universe.legal_name}</h1></div></div><div class="error-msg">No filings extracted yet for ${ticker}.</div>`;
+    root.innerHTML = `
+      <div class="fund-header">
+        <div class="name-row"><span class="ticker-badge">${ticker}</span><h1>${universe.legal_name}</h1></div>
+      </div>
+      <div class="error-msg">No quarterly data extracted yet for ${ticker}.</div>`;
     return;
   }
 
-  const first = filings[0];
-  const latest = filings[filings.length - 1];
-  const cumChange = (latest.nav_eop != null && first.nav_bop != null && first.nav_bop !== 0)
-    ? (latest.nav_eop - first.nav_bop) / first.nav_bop
-    : null;
+  const latest = quarters[quarters.length - 1];
+  const first = quarters[0];
 
   root.className = '';
   const cikPadded = (universe.cik_padded || universe.cik || '').padStart(10, '0');
   const edgarUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cikPadded}&type=&dateb=&owner=include&count=40`;
+
+  // Period type: are we in Q-mode (BDC/REIT) or H/FY-mode (N-CSR)?
+  // If all rows are H or FY, use the H/FY layout; otherwise Q layout.
+  const allHFY = quarters.every(q => q.period_type === 'H' || q.period_type === 'FY');
+
+  // Latest net flow (subs - reps) and NAV
+  const netFlow = ((latest.issuance_total || 0) + (latest.drip_total || 0))
+                 + (latest.repurchases_total != null ? -Math.abs(latest.repurchases_total) : 0);
+
   root.innerHTML = `
     <div class="fund-header">
       <div class="name-row">
@@ -77,162 +87,116 @@
         <span class="pill">${universe.sponsor}</span>
         <span class="pill">${universe.strategy}</span>
         <span class="pill">${universe.form_factor}</span>
-        <span class="pill">${universe.status || ''}</span>
+        ${universe.status ? `<span class="pill">${universe.status}</span>` : ''}
       </div>
       <div class="links">
-        CIK ${cikPadded} · <a href="${edgarUrl}" target="_blank" rel="noopener">SEC EDGAR filings &rarr;</a>
+        Latest filing: ${fmtDate(latest.filing_date)} (${latest.source_form}) ·
+        CIK ${cikPadded} ·
+        <a href="${edgarUrl}" target="_blank" rel="noopener">SEC EDGAR &rarr;</a>
       </div>
     </div>
 
     <div class="stat-row">
-      <div class="stat-card"><div class="label">Current NAV</div><div class="value">${fmtMoney(latest.nav_eop)}</div><div class="sub">${fmtDate(latest.filing_date)} (${latest.form})</div></div>
-      <div class="stat-card"><div class="label">Period growth</div><div class="value ${latest.nav_eop_period_growth >= 0 ? 'pos' : 'neg'}">${fmtPctSigned(latest.nav_eop_period_growth)}</div><div class="sub">latest filing</div></div>
-      <div class="stat-card"><div class="label">Cumulative NAV change</div><div class="value ${cumChange >= 0 ? 'pos' : 'neg'}">${fmtPctSigned(cumChange)}</div><div class="sub">since ${fmtDate(first.filing_date)}</div></div>
-      <div class="stat-card"><div class="label">Filings tracked</div><div class="value">${filings.length}</div><div class="sub">${fmtDate(first.filing_date)} → ${fmtDate(latest.filing_date)}</div></div>
+      <div class="stat-card"><div class="label">Latest NAV</div><div class="value">${fmtM(latest.nav_eop)}</div><div class="sub">${latest.quarter_label}</div></div>
+      <div class="stat-card"><div class="label">NAV change (period)</div><div class="value ${signClass(latest.nav_change_pct)}">${fmtPctSigned(latest.nav_change_pct)}</div><div class="sub">vs prior period</div></div>
+      <div class="stat-card"><div class="label">Net capital activity (latest)</div><div class="value ${signClass(latest.net_capital_activity)}">${fmtM(latest.net_capital_activity)}</div><div class="sub">${latest.quarter_label}</div></div>
+      <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quarters.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
     </div>
 
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="nav">NAV time series</button>
-      <button class="tab-btn" data-tab="flows">Flow breakdown</button>
-      <button class="tab-btn" data-tab="table">Full data table</button>
+    <h2 class="section-title">Quarterly detail</h2>
+    <div class="legend">
+      <span class="legend-chip"><span class="dot legend-q"></span>Q = 10-Q quarterly</span>
+      <span class="legend-chip"><span class="dot legend-derived"></span>derived Q4 = computed from 10-K minus Q1+Q2+Q3</span>
+      <span class="legend-chip"><span class="dot legend-h"></span>H/FY = semi-annual or full-year (N-CSR)</span>
     </div>
-
-    <div class="tab-panel active" id="tab-nav">
-      <div class="chart-wrap"><canvas id="navChart"></canvas></div>
-    </div>
-    <div class="tab-panel" id="tab-flows">
-      <div class="chart-wrap"><canvas id="flowChart"></canvas></div>
-    </div>
-    <div class="tab-panel" id="tab-table">
-      <div class="table-toolbar">
-        <button class="btn" id="dl-csv">Download CSV</button>
-      </div>
-      <div id="full-table"></div>
+    <div class="qtable-wrap">
+      <table class="qtable" id="qtable"></table>
     </div>
   `;
 
-  // Tabs
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    });
-  });
+  // ---- Build transposed table ----
+  const table = document.getElementById('qtable');
 
-  // NAV chart
-  const labels = filings.map(f => f.filing_date);
-  const navCtx = document.getElementById('navChart').getContext('2d');
-  new Chart(navCtx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'NAV (end of period)',
-          data: filings.map(f => f.nav_eop),
-          borderColor: '#c47a00',
-          backgroundColor: 'rgba(196, 122, 0, 0.1)',
-          tension: 0.15,
-          spanGaps: true,
-          pointRadius: 3,
-        },
-        {
-          label: 'NAV (beginning of period)',
-          data: filings.map(f => f.nav_bop),
-          borderColor: '#1f5fa6',
-          backgroundColor: 'rgba(31, 95, 166, 0.1)',
-          tension: 0.15,
-          spanGaps: true,
-          pointRadius: 3,
-          borderDash: [4, 4],
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 11 } } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}`,
-          },
-        },
-      },
-      scales: {
-        x: { ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true } },
-        y: { ticks: { font: { size: 10 }, callback: (v) => fmtMoney(v) } },
-      },
-    },
-  });
-
-  // Flow chart (stacked bar)
-  const flowCtx = document.getElementById('flowChart').getContext('2d');
-  new Chart(flowCtx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Issuance', data: filings.map(f => f.issuance_total), backgroundColor: '#1f5fa6', stack: 's' },
-        { label: 'DRIP', data: filings.map(f => f.drip_total), backgroundColor: '#52be80', stack: 's' },
-        { label: 'Distributions', data: filings.map(f => f.distributions_total != null ? -Math.abs(f.distributions_total) : null), backgroundColor: '#c0392b', stack: 's' },
-        { label: 'Repurchases', data: filings.map(f => f.repurchases_total != null ? -Math.abs(f.repurchases_total) : null), backgroundColor: '#d35400', stack: 's' },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 11 } } },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}` } },
-      },
-      scales: {
-        x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true } },
-        y: { stacked: true, ticks: { font: { size: 10 }, callback: (v) => fmtMoney(v) } },
-      },
-    },
-  });
-
-  // Full table — show every column
-  const allCols = Object.keys(filings[0]);
-  const dropCols = new Set(['ticker', 'sponsor', 'strategy', 'form_factor', 'legal_name', 'cik']);
-  const cols = [
-    {title: 'Filing Date', field: 'filing_date', frozen: true, width: 120, cssClass: 'num'},
-    {title: 'Form', field: 'form', width: 70, frozen: true},
-    {title: 'Period Months', field: 'period_months', width: 80, cssClass: 'num'},
+  // Sections of metrics. Each row: {label, key, kind: 'money'|'pct'|''}
+  const SECTIONS = [
+    { name: 'NAV', rows: [
+      { label: 'NAV — beginning of period', key: 'nav_bop', kind: 'money' },
+      { label: 'NAV — end of period', key: 'nav_eop', kind: 'money' },
+      { label: 'NAV change ($)', key: 'nav_change', kind: 'moneySigned' },
+      { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
+    ]},
+    { name: 'Flows', rows: [
+      { label: 'Subscriptions (issuance)', key: 'issuance_total', kind: 'money' },
+      { label: 'DRIP', key: 'drip_total', kind: 'money' },
+      { label: 'Redemptions / repurchases', key: 'repurchases_total', kind: 'moneyNeg' },
+      { label: 'Distributions paid', key: 'distributions_total', kind: 'moneyNeg' },
+      { label: 'Net capital activity', key: 'net_capital_activity', kind: 'moneySigned' },
+    ]},
+    { name: 'Income / P&L', rows: [
+      { label: 'Investment income / revenues', key: 'total_investment_income_or_revenues', kind: 'money' },
+      { label: 'Net investment income / net income', key: 'net_income_or_nii', kind: 'moneySigned' },
+      { label: 'Net change from operations', key: 'net_inc_from_ops', kind: 'moneySigned' },
+    ]},
+    { name: 'Expenses', rows: [
+      { label: 'Management fees', key: 'management_fees', kind: 'money' },
+      { label: 'Incentive fees (income-based)', key: 'incentive_fee_income_based', kind: 'money' },
+      { label: 'Total expenses (gross)', key: 'total_expenses_gross', kind: 'money' },
+    ]},
+    { name: 'Balance sheet (point-in-time)', rows: [
+      { label: 'Total assets', key: 'total_assets', kind: 'money' },
+      { label: 'Total debt', key: 'total_debt', kind: 'money' },
+      { label: 'Total net assets / equity', key: 'total_net_assets_or_equity', kind: 'money' },
+    ]},
   ];
-  const seen = new Set(cols.map(c => c.field));
-  for (const c of allCols) {
-    if (dropCols.has(c) || seen.has(c)) continue;
-    seen.add(c);
-    const isNumeric = filings.some(f => typeof f[c] === 'number');
-    const col = { title: c, field: c, width: 130 };
-    if (isNumeric) {
-      col.cssClass = 'num';
-      col.formatter = (cell) => {
-        const v = cell.getValue();
-        if (v == null) return '—';
-        if (c.includes('growth') || c.includes('pct')) return fmtPct(v);
-        return fmtMoney(v);
-      };
-      col.sorter = 'number';
-    }
-    cols.push(col);
-  }
 
-  const table = new Tabulator('#full-table', {
-    data: filings,
-    layout: 'fitDataStretch',
-    height: '60vh',
-    columns: cols,
-    initialSort: [{column: 'filing_date', dir: 'asc'}],
-  });
-  document.getElementById('dl-csv').addEventListener('click', () => {
-    table.download('csv', `${ticker}_filings.csv`);
-  });
+  // Header row: empty corner + quarter labels
+  let html = '<thead><tr><th class="row-label">Metric \\ Period</th>';
+  for (const q of quarters) {
+    const cls = q.source_form === 'derived-Q4' ? 'qhead derived'
+              : q.period_type === 'H' ? 'qhead semi'
+              : q.period_type === 'FY' ? 'qhead annual'
+              : 'qhead';
+    html += `<th class="${cls}"><div>${q.quarter_label}</div><div class="qhead-sub">${q.source_form}</div></th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const section of SECTIONS) {
+    html += `<tr class="section-row"><td colspan="${quarters.length + 1}">${section.name}</td></tr>`;
+    for (const row of section.rows) {
+      html += `<tr><td class="row-label">${row.label}</td>`;
+      for (const q of quarters) {
+        const v = q[row.key];
+        let text = '—';
+        let cls = 'val';
+        if (v != null && !Number.isNaN(v)) {
+          if (row.kind === 'money') {
+            // Show as positive magnitude; if stored as negative, display in parens.
+            text = fmtM(v);
+            cls += ' ' + signClass(v);
+          } else if (row.kind === 'moneySigned') {
+            text = fmtMSigned(v);
+            cls += ' ' + signClass(v);
+          } else if (row.kind === 'moneyNeg') {
+            // Distributions / repurchases — typically stored negative.
+            // Always display as a negative magnitude in red, parenthesized.
+            const mag = -Math.abs(v);
+            text = fmtM(mag);
+            cls += ' neg';
+          } else if (row.kind === 'pctSigned') {
+            text = fmtPctSigned(v);
+            cls += ' ' + signClass(v);
+          } else if (row.kind === 'pct') {
+            text = fmtPct(v);
+          }
+        }
+        if (q.source_form === 'derived-Q4') cls += ' derived';
+        html += `<td class="${cls}">${text}</td>`;
+      }
+      html += '</tr>';
+    }
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
 })();
 </script>
 </body>

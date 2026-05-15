@@ -30,12 +30,14 @@
   <h2>Funds</h2>
   <div class="table-toolbar">
     <input type="text" id="search" placeholder="filter by ticker, name, sponsor…">
+    <select id="strategy-filter"><option value="">All strategies</option></select>
+    <select id="sponsor-filter"><option value="">All sponsors</option></select>
   </div>
   <div id="universe-table"></div>
 </main>
 
 <footer class="sitefoot">
-  Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. Values in actual dollars. Not investment advice.
+  Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. All dollar values in millions. Not investment advice.
 </footer>
 
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
@@ -46,41 +48,74 @@
   let data;
   try { data = await loadData(); } catch { return; }
 
-  // Build per-ticker latest record
-  const byTicker = groupByTicker(data.filings);
-  const sponsorMap = {};
-  const universeByTicker = {};
-  for (const u of data.universe) universeByTicker[u.ticker] = u;
+  const byTicker = groupQuartersByTicker(data.quarters || []);
+  const sponsorSet = new Set();
+  const strategySet = new Set();
 
   const rows = [];
   let totalNav = 0;
   let totalNavCount = 0;
   for (const u of data.universe) {
-    const filings = byTicker.get(u.ticker) || [];
-    const latest = filings.length ? filings[filings.length - 1] : null;
+    const qs = byTicker.get(u.ticker) || [];
+    const latest = qs.length ? qs[qs.length - 1] : null;
     const navEop = latest ? latest.nav_eop : null;
     if (navEop != null) { totalNav += navEop; totalNavCount++; }
+    const iss = latest ? latest.issuance_total : null;
+    const rep = latest ? latest.repurchases_total : null;
+    let netFlow = null;
+    if (iss != null || rep != null) {
+      netFlow = (iss || 0) + (rep != null ? -Math.abs(rep) : 0);
+    }
     rows.push({
       ticker: u.ticker,
       legal_name: u.legal_name,
       sponsor: u.sponsor,
       strategy: u.strategy,
       form_factor: u.form_factor,
-      latest_filing: latest ? latest.filing_date : null,
-      latest_form: latest ? latest.form : null,
+      latest_period: latest ? latest.quarter_label : null,
+      latest_form: latest ? latest.source_form : null,
       nav_eop: navEop,
-      growth: latest ? latest.nav_eop_period_growth : null,
-      n_filings: filings.length
+      growth: latest ? latest.nav_change_pct : null,
+      net_flow: netFlow,
+      n_periods: qs.length
     });
-    sponsorMap[u.sponsor] = true;
+    if (u.sponsor) sponsorSet.add(u.sponsor);
+    if (u.strategy) strategySet.add(u.strategy);
   }
 
-  // Headline stats
-  document.getElementById('stat-nav').textContent = fmtMoney(totalNav);
+  document.getElementById('stat-nav').textContent = fmtM(totalNav);
   document.getElementById('stat-nav-sub').textContent = `${totalNavCount}/${data.universe.length} funds reporting`;
   document.getElementById('stat-funds').textContent = String(byTicker.size);
-  document.getElementById('stat-sponsors').textContent = String(Object.keys(sponsorMap).length);
+  document.getElementById('stat-sponsors').textContent = String(sponsorSet.size);
   document.getElementById('stat-refresh').textContent = fmtDate(data.data_through);
+
+  // Populate filter dropdowns
+  const stratSel = document.getElementById('strategy-filter');
+  for (const s of [...strategySet].sort()) {
+    const o = document.createElement('option'); o.value = s; o.textContent = s; stratSel.appendChild(o);
+  }
+  const spSel = document.getElementById('sponsor-filter');
+  for (const s of [...sponsorSet].sort()) {
+    const o = document.createElement('option'); o.value = s; o.textContent = s; spSel.appendChild(o);
+  }
+
+  const moneyCell = (cell) => fmtM(cell.getValue());
+  const moneySignedCell = (cell) => {
+    const v = cell.getValue();
+    if (v == null) return '—';
+    const el = document.createElement('span');
+    el.textContent = fmtMSigned(v);
+    if (v > 0) el.className = 'pos'; else if (v < 0) el.className = 'neg';
+    return el;
+  };
+  const pctSignedCell = (cell) => {
+    const v = cell.getValue();
+    if (v == null) return '—';
+    const el = document.createElement('span');
+    el.textContent = fmtPctSigned(v);
+    if (v > 0) el.className = 'pos'; else if (v < 0) el.className = 'neg';
+    return el;
+  };
 
   const table = new Tabulator('#universe-table', {
     data: rows,
@@ -93,29 +128,39 @@
          const t = cell.getValue();
          return `<a href="./fund.html?ticker=${encodeURIComponent(t)}"><span class="ticker-badge">${t}</span></a>`;
       }},
-      {title: 'Legal Name', field: 'legal_name', minWidth: 240},
+      {title: 'Legal Name', field: 'legal_name', minWidth: 220},
       {title: 'Sponsor', field: 'sponsor', width: 90},
       {title: 'Strategy', field: 'strategy', width: 95},
       {title: 'Form Factor', field: 'form_factor', width: 110},
-      {title: 'Latest Filing', field: 'latest_filing', width: 130, cssClass: 'num', formatter: (c) => fmtDate(c.getValue())},
-      {title: 'Form', field: 'latest_form', width: 75},
+      {title: 'Latest Period', field: 'latest_period', width: 110, cssClass: 'num'},
+      {title: 'Form', field: 'latest_form', width: 100},
       {title: 'Latest NAV', field: 'nav_eop', width: 130, cssClass: 'num', formatter: moneyCell, sorter: 'number'},
-      {title: 'Period MoM', field: 'growth', width: 110, cssClass: 'num', formatter: pctSignedCell, sorter: 'number'},
-      {title: '# Filings', field: 'n_filings', width: 90, cssClass: 'num'},
+      {title: 'Period change', field: 'growth', width: 110, cssClass: 'num', formatter: pctSignedCell, sorter: 'number'},
+      {title: 'Net flow (latest)', field: 'net_flow', width: 140, cssClass: 'num', formatter: moneySignedCell, sorter: 'number'},
+      {title: '# Periods', field: 'n_periods', width: 90, cssClass: 'num'},
     ],
   });
 
-  document.getElementById('search').addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase().trim();
-    if (!q) { table.clearFilter(); return; }
+  function applyFilter() {
+    const q = (document.getElementById('search').value || '').toLowerCase().trim();
+    const strat = stratSel.value;
+    const sp = spSel.value;
     table.setFilter((row) => {
-      return (row.ticker || '').toLowerCase().includes(q)
+      if (strat && row.strategy !== strat) return false;
+      if (sp && row.sponsor !== sp) return false;
+      if (q && !(
+        (row.ticker || '').toLowerCase().includes(q)
         || (row.legal_name || '').toLowerCase().includes(q)
         || (row.sponsor || '').toLowerCase().includes(q)
         || (row.strategy || '').toLowerCase().includes(q)
-        || (row.form_factor || '').toLowerCase().includes(q);
+        || (row.form_factor || '').toLowerCase().includes(q)
+      )) return false;
+      return true;
     });
-  });
+  }
+  document.getElementById('search').addEventListener('input', applyFilter);
+  stratSel.addEventListener('change', applyFilter);
+  spSel.addEventListener('change', applyFilter);
 })();
 </script>
 </body>
