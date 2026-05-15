@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alt-Manager Non-Traded Product Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html" class="active">Universe</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html">Compare</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>Non-traded product universe</h1>
+  <div class="stat-row" id="stat-row">
+    <div class="stat-card"><div class="label">Total NAV (latest)</div><div class="value" id="stat-nav">…</div><div class="sub" id="stat-nav-sub"></div></div>
+    <div class="stat-card"><div class="label">Funds tracked</div><div class="value" id="stat-funds">…</div></div>
+    <div class="stat-card"><div class="label">Sponsors</div><div class="value" id="stat-sponsors">…</div></div>
+    <div class="stat-card"><div class="label">Latest filing</div><div class="value" id="stat-refresh">…</div></div>
+  </div>
+
+  <h2>Funds</h2>
+  <div class="table-toolbar">
+    <input type="text" id="search" placeholder="filter by ticker, name, sponsor…">
+  </div>
+  <div id="universe-table"></div>
+</main>
+
+<footer class="sitefoot">
+  Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. Values in actual dollars. Not investment advice.
+</footer>
+
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="./app.js"></script>
+<script>
+(async function() {
+  paintRefreshDate();
+  let data;
+  try { data = await loadData(); } catch { return; }
+
+  // Build per-ticker latest record
+  const byTicker = groupByTicker(data.filings);
+  const sponsorMap = {};
+  const universeByTicker = {};
+  for (const u of data.universe) universeByTicker[u.ticker] = u;
+
+  const rows = [];
+  let totalNav = 0;
+  let totalNavCount = 0;
+  for (const u of data.universe) {
+    const filings = byTicker.get(u.ticker) || [];
+    const latest = filings.length ? filings[filings.length - 1] : null;
+    const navEop = latest ? latest.nav_eop : null;
+    if (navEop != null) { totalNav += navEop; totalNavCount++; }
+    rows.push({
+      ticker: u.ticker,
+      legal_name: u.legal_name,
+      sponsor: u.sponsor,
+      strategy: u.strategy,
+      form_factor: u.form_factor,
+      latest_filing: latest ? latest.filing_date : null,
+      latest_form: latest ? latest.form : null,
+      nav_eop: navEop,
+      growth: latest ? latest.nav_eop_period_growth : null,
+      n_filings: filings.length
+    });
+    sponsorMap[u.sponsor] = true;
+  }
+
+  // Headline stats
+  document.getElementById('stat-nav').textContent = fmtMoney(totalNav);
+  document.getElementById('stat-nav-sub').textContent = `${totalNavCount}/${data.universe.length} funds reporting`;
+  document.getElementById('stat-funds').textContent = String(byTicker.size);
+  document.getElementById('stat-sponsors').textContent = String(Object.keys(sponsorMap).length);
+  document.getElementById('stat-refresh').textContent = fmtDate(data.data_through);
+
+  const table = new Tabulator('#universe-table', {
+    data: rows,
+    layout: 'fitColumns',
+    pagination: false,
+    height: '60vh',
+    initialSort: [{column: 'nav_eop', dir: 'desc'}],
+    columns: [
+      {title: 'Ticker', field: 'ticker', width: 110, formatter: (cell) => {
+         const t = cell.getValue();
+         return `<a href="./fund.html?ticker=${encodeURIComponent(t)}"><span class="ticker-badge">${t}</span></a>`;
+      }},
+      {title: 'Legal Name', field: 'legal_name', minWidth: 240},
+      {title: 'Sponsor', field: 'sponsor', width: 90},
+      {title: 'Strategy', field: 'strategy', width: 95},
+      {title: 'Form Factor', field: 'form_factor', width: 110},
+      {title: 'Latest Filing', field: 'latest_filing', width: 130, cssClass: 'num', formatter: (c) => fmtDate(c.getValue())},
+      {title: 'Form', field: 'latest_form', width: 75},
+      {title: 'Latest NAV', field: 'nav_eop', width: 130, cssClass: 'num', formatter: moneyCell, sorter: 'number'},
+      {title: 'Period MoM', field: 'growth', width: 110, cssClass: 'num', formatter: pctSignedCell, sorter: 'number'},
+      {title: '# Filings', field: 'n_filings', width: 90, cssClass: 'num'},
+    ],
+  });
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    if (!q) { table.clearFilter(); return; }
+    table.setFilter((row) => {
+      return (row.ticker || '').toLowerCase().includes(q)
+        || (row.legal_name || '').toLowerCase().includes(q)
+        || (row.sponsor || '').toLowerCase().includes(q)
+        || (row.strategy || '').toLowerCase().includes(q)
+        || (row.form_factor || '').toLowerCase().includes(q);
+    });
+  });
+})();
+</script>
+</body>
+</html>

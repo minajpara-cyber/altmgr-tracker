@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Compare — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html" class="active">Compare</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>Cross-fund comparison</h1>
+  <div class="compare-layout">
+    <aside class="compare-side">
+      <h3>Metric</h3>
+      <select id="metric">
+        <option value="nav_eop">NAV — end of period</option>
+        <option value="nav_eop_period_growth">NAV % change (period)</option>
+        <option value="distributions_total">Distributions paid</option>
+        <option value="issuance_total">Net flows in (issuance)</option>
+        <option value="repurchases_total">Net flows out (repurchases)</option>
+        <option value="net_capital_activity">Net capital activity</option>
+        <option value="management_fees">Management fees</option>
+        <option value="incentive_fee_income_based">Incentive fees (income-based)</option>
+        <option value="total_assets">Total assets</option>
+      </select>
+
+      <h3>Time window</h3>
+      <div class="date-row">
+        <div><label>From</label><input type="date" id="date-from"></div>
+        <div><label>To</label><input type="date" id="date-to"></div>
+      </div>
+
+      <h3>Quick select</h3>
+      <div class="chip-row" id="chip-row"></div>
+
+      <h3>Funds</h3>
+      <input type="text" id="ticker-search" placeholder="filter tickers…">
+      <div class="ticker-list" id="ticker-list"></div>
+    </aside>
+
+    <section>
+      <div class="chart-wrap"><canvas id="cmpChart"></canvas></div>
+      <h2 style="margin-top: 18px;">Summary</h2>
+      <div id="summary-table"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="sitefoot">
+  Data extracted from SEC EDGAR.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="./app.js"></script>
+<script>
+(async function() {
+  paintRefreshDate();
+  let data;
+  try { data = await loadData(); } catch { return; }
+
+  const filingsByTicker = groupByTicker(data.filings);
+  const universeByTicker = Object.fromEntries(data.universe.map(u => [u.ticker, u]));
+  // Only include tickers with at least one filing
+  const tickers = data.universe.filter(u => filingsByTicker.has(u.ticker)).map(u => u.ticker).sort();
+  const colorByTicker = {};
+  const palette = colorPalette(tickers.length);
+  tickers.forEach((t, i) => colorByTicker[t] = palette[i]);
+
+  // Initial selection: top 5 by latest NAV
+  const initial = [...tickers].map(t => {
+    const arr = filingsByTicker.get(t);
+    const latest = arr[arr.length - 1];
+    return { t, nav: latest && latest.nav_eop != null ? latest.nav_eop : -1 };
+  }).sort((a, b) => b.nav - a.nav).slice(0, 5).map(o => o.t);
+  const selected = new Set(initial);
+
+  // Default date window: full range
+  const allDates = data.filings.map(f => f.filing_date).filter(Boolean).sort();
+  const minDate = allDates[0];
+  const maxDate = allDates[allDates.length - 1];
+  document.getElementById('date-from').value = minDate;
+  document.getElementById('date-to').value = maxDate;
+  document.getElementById('date-from').min = minDate;
+  document.getElementById('date-from').max = maxDate;
+  document.getElementById('date-to').min = minDate;
+  document.getElementById('date-to').max = maxDate;
+
+  // Render ticker list
+  const listEl = document.getElementById('ticker-list');
+  function renderList(filter='') {
+    const q = filter.toLowerCase().trim();
+    listEl.innerHTML = '';
+    for (const t of tickers) {
+      const u = universeByTicker[t];
+      const hay = (t + ' ' + (u.legal_name || '') + ' ' + (u.sponsor || '') + ' ' + (u.strategy || '')).toLowerCase();
+      if (q && !hay.includes(q)) continue;
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = t;
+      cb.checked = selected.has(t);
+      cb.addEventListener('change', () => {
+        if (cb.checked) selected.add(t); else selected.delete(t);
+        update();
+      });
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:9px;height:9px;background:${colorByTicker[t]};border-radius:1px;`;
+      const name = document.createElement('span');
+      name.textContent = t;
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = `${u.sponsor}·${u.strategy}`;
+      label.append(cb, swatch, name, sub);
+      listEl.appendChild(label);
+    }
+  }
+  document.getElementById('ticker-search').addEventListener('input', e => renderList(e.target.value));
+
+  // Quick-select chips
+  const chips = [
+    { label: 'All', filter: () => true },
+    { label: 'Clear', filter: () => false },
+    { label: 'Credit', filter: t => universeByTicker[t].strategy === 'Credit' },
+    { label: 'RE', filter: t => universeByTicker[t].strategy === 'RE' },
+    { label: 'PE', filter: t => universeByTicker[t].strategy === 'PE' },
+    { label: 'Infra', filter: t => universeByTicker[t].strategy === 'Infra' },
+    { label: 'BX only', filter: t => universeByTicker[t].sponsor === 'BX' },
+    { label: 'OWL only', filter: t => universeByTicker[t].sponsor === 'OWL' },
+    { label: 'APO only', filter: t => universeByTicker[t].sponsor === 'APO' },
+    { label: 'KKR only', filter: t => universeByTicker[t].sponsor === 'KKR' },
+    { label: 'ARES only', filter: t => universeByTicker[t].sponsor === 'ARES' },
+    { label: 'BDCs', filter: t => universeByTicker[t].form_factor === 'nt-BDC' },
+    { label: 'REITs', filter: t => universeByTicker[t].form_factor === 'nt-REIT' },
+  ];
+  const chipRow = document.getElementById('chip-row');
+  for (const c of chips) {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.textContent = c.label;
+    btn.addEventListener('click', () => {
+      selected.clear();
+      for (const t of tickers) if (c.filter(t)) selected.add(t);
+      renderList(document.getElementById('ticker-search').value);
+      update();
+    });
+    chipRow.appendChild(btn);
+  }
+
+  document.getElementById('metric').addEventListener('change', update);
+  document.getElementById('date-from').addEventListener('change', update);
+  document.getElementById('date-to').addEventListener('change', update);
+
+  let chart = null;
+  let summaryTable = null;
+
+  function update() {
+    const metric = document.getElementById('metric').value;
+    const dFrom = document.getElementById('date-from').value;
+    const dTo = document.getElementById('date-to').value;
+    const isPct = metric === 'nav_eop_period_growth';
+
+    const datasets = [];
+    const allLabelsSet = new Set();
+    const summaryRows = [];
+
+    for (const t of [...selected].sort()) {
+      const arr = (filingsByTicker.get(t) || []).filter(f => {
+        if (!f.filing_date) return false;
+        if (dFrom && f.filing_date < dFrom) return false;
+        if (dTo && f.filing_date > dTo) return false;
+        return true;
+      });
+      if (!arr.length) continue;
+      const points = arr.map(f => ({ x: f.filing_date, y: f[metric] != null ? (metric === 'repurchases_total' && f[metric] > 0 ? -f[metric] : f[metric]) : null }));
+      points.forEach(p => allLabelsSet.add(p.x));
+      datasets.push({
+        label: t,
+        data: points,
+        borderColor: colorByTicker[t],
+        backgroundColor: colorByTicker[t],
+        tension: 0.15,
+        spanGaps: true,
+        pointRadius: 2,
+        borderWidth: 1.8,
+      });
+
+      // Summary row
+      const present = arr.filter(f => f[metric] != null);
+      const first = present[0];
+      const last = present[present.length - 1];
+      const fv = first ? first[metric] : null;
+      const lv = last ? last[metric] : null;
+      let change = null, pctChange = null;
+      if (fv != null && lv != null) {
+        change = lv - fv;
+        if (fv !== 0) pctChange = change / Math.abs(fv);
+      }
+      summaryRows.push({
+        ticker: t,
+        sponsor: universeByTicker[t].sponsor,
+        strategy: universeByTicker[t].strategy,
+        first_date: first ? first.filing_date : null,
+        first_val: fv,
+        last_date: last ? last.filing_date : null,
+        last_val: lv,
+        change,
+        pct_change: pctChange,
+        is_pct_metric: isPct,
+      });
+    }
+
+    const labels = [...allLabelsSet].sort();
+
+    if (chart) chart.destroy();
+    const ctx = document.getElementById('cmpChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed.y;
+                return `${ctx.dataset.label}: ${isPct ? fmtPct(v) : fmtMoney(v)}`;
+              },
+              title: (items) => items[0] ? items[0].parsed.x : '',
+            },
+          },
+        },
+        scales: {
+          x: { type: 'category', labels, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+          y: { ticks: { font: { size: 10 }, callback: (v) => isPct ? fmtPct(v) : fmtMoney(v) } },
+        },
+      },
+    });
+
+    // Summary table
+    const cols = [
+      { title: 'Ticker', field: 'ticker', width: 90, formatter: (c) => `<a href="./fund.html?ticker=${c.getValue()}">${c.getValue()}</a>` },
+      { title: 'Sponsor', field: 'sponsor', width: 80 },
+      { title: 'Strategy', field: 'strategy', width: 90 },
+      { title: 'First obs', field: 'first_date', width: 110, cssClass: 'num', formatter: (c) => fmtDate(c.getValue()) },
+      { title: 'First value', field: 'first_val', cssClass: 'num', width: 140, formatter: (c) => {
+          const r = c.getRow().getData();
+          return r.is_pct_metric ? fmtPct(c.getValue()) : fmtMoney(c.getValue());
+      }, sorter: 'number'},
+      { title: 'Latest obs', field: 'last_date', width: 110, cssClass: 'num', formatter: (c) => fmtDate(c.getValue()) },
+      { title: 'Latest value', field: 'last_val', cssClass: 'num', width: 140, formatter: (c) => {
+          const r = c.getRow().getData();
+          return r.is_pct_metric ? fmtPct(c.getValue()) : fmtMoney(c.getValue());
+      }, sorter: 'number'},
+      { title: 'Change', field: 'change', cssClass: 'num', width: 140, formatter: (c) => {
+          const r = c.getRow().getData();
+          const v = c.getValue();
+          const el = document.createElement('span');
+          el.textContent = r.is_pct_metric ? fmtPctSigned(v) : fmtMoneySigned(v);
+          if (v > 0) el.className = 'pos'; else if (v < 0) el.className = 'neg';
+          return el;
+      }, sorter: 'number'},
+      { title: '% Change', field: 'pct_change', cssClass: 'num', width: 120, formatter: pctSignedCell, sorter: 'number'},
+    ];
+
+    if (summaryTable) summaryTable.destroy();
+    summaryTable = new Tabulator('#summary-table', {
+      data: summaryRows,
+      columns: cols,
+      layout: 'fitDataStretch',
+      pagination: false,
+      height: false,
+      initialSort: [{column: 'last_val', dir: 'desc'}],
+    });
+  }
+
+  renderList();
+  update();
+})();
+</script>
+</body>
+</html>
