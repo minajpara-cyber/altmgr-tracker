@@ -58,6 +58,15 @@
         <label><input type="radio" name="chart" value="line" checked> Line</label>
         <label><input type="radio" name="chart" value="stacked"> Stacked area</label>
       </div>
+      <div class="unit-toggle" id="zoom-toggle">
+        <label><input type="radio" name="zoom" value="auto" checked> Auto fit</label>
+        <label><input type="radio" name="zoom" value="clip"> Clip outliers</label>
+        <label><input type="radio" name="zoom" value="manual"> Manual</label>
+      </div>
+      <div id="manual-range" style="display:none; font-size:11px; margin-top:4px;">
+        <label>Min: <input type="number" id="y-min" style="width:70px;" step="any"></label>
+        <label>Max: <input type="number" id="y-max" style="width:70px;" step="any"></label>
+      </div>
 
       <h3>Quick select</h3>
       <div class="chip-row" id="chip-row"></div>
@@ -237,6 +246,45 @@
     chartWrap.classList.toggle('locked', stackedLocked);
   }
 
+  // Y-axis scaling — let the user clip outliers or set manual bounds
+  document.querySelectorAll('input[name="zoom"]').forEach(r =>
+    r.addEventListener('change', () => {
+      document.getElementById('manual-range').style.display =
+        (document.querySelector('input[name="zoom"]:checked').value === 'manual') ? 'block' : 'none';
+      update();
+    })
+  );
+  document.getElementById('y-min').addEventListener('change', update);
+  document.getElementById('y-max').addEventListener('change', update);
+
+  function computeYBounds(datasets) {
+    const mode = document.querySelector('input[name="zoom"]:checked').value;
+    if (mode === 'auto') return {};
+    if (mode === 'manual') {
+      const mn = parseFloat(document.getElementById('y-min').value);
+      const mx = parseFloat(document.getElementById('y-max').value);
+      const out = {};
+      if (!isNaN(mn)) out.min = mn;
+      if (!isNaN(mx)) out.max = mx;
+      return out;
+    }
+    // clip — use 5th/95th percentile of all non-null values across datasets
+    const vals = [];
+    for (const ds of datasets) {
+      for (const pt of (ds.data || [])) {
+        const y = pt && typeof pt === 'object' ? pt.y : pt;
+        if (y != null && !Number.isNaN(y)) vals.push(y);
+      }
+    }
+    if (vals.length < 4) return {};
+    vals.sort((a, b) => a - b);
+    const pick = (frac) => vals[Math.max(0, Math.min(vals.length - 1, Math.floor(frac * (vals.length - 1))))];
+    let lo = pick(0.05), hi = pick(0.95);
+    // Add 10% padding for breathing room
+    const pad = (hi - lo) * 0.10 || Math.abs(lo + hi) * 0.05 || 1;
+    return { min: lo - pad, max: hi + pad };
+  }
+
   let chart = null;
 
   function update() {
@@ -316,6 +364,7 @@
           y: {
             stacked: stacked,
             ticks: { font: { size: 10 }, callback: (v) => isPct ? fmtPct(v) : fmtM(v) },
+            ...computeYBounds(datasets),
           },
         },
       },

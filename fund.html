@@ -25,6 +25,7 @@
   Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. All dollar values in millions.
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js"></script>
 <script>
 (async function() {
@@ -108,6 +109,8 @@
       <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quarters.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
     </div>
 
+    <h2 class="section-title">Performance over time</h2>
+    <div class="chart-wrap" style="height:280px;"><canvas id="perfChart"></canvas></div>
     <h2 class="section-title">Quarterly detail</h2>
     <div class="legend">
       <span class="legend-chip"><span class="dot legend-q"></span>Q = 10-Q quarterly</span>
@@ -124,12 +127,18 @@
 
   // Sections of metrics. Each row: {label, key, kind: 'money'|'pct'|''}
   const SECTIONS = [
+    { name: 'Performance', rows: [
+      { label: 'Quarter return — unified (%)', key: 'unified_return_pct', kind: 'pctSigned' },
+      { label: '  ↳ source', key: 'unified_return_src', kind: 'text' },
+      { label: 'NAV bridge return (%)', key: 'bridge_return_pct', kind: 'pctSigned' },
+      { label: 'Operating return (%)', key: '_operating_return', kind: 'pctSigned' },
+      { label: 'NPORT quarterly return (%)', key: 'quarterly_return', kind: 'pctSigned' },
+    ]},
     { name: 'NAV', rows: [
       { label: 'NAV — beginning of period', key: 'nav_bop', kind: 'money' },
       { label: 'NAV — end of period', key: 'nav_eop', kind: 'money' },
       { label: 'NAV change ($)', key: 'nav_change', kind: 'moneySigned' },
       { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
-      { label: 'Total return (%) — NAV bridge', key: 'bridge_return_pct', kind: 'pctSigned' },
     ]},
     { name: 'Flows', rows: [
       { label: 'Cash subscriptions', key: 'issuance_total', kind: 'money' },
@@ -235,12 +244,19 @@
         if (row.key === '_total_subscriptions') {
           const a = q.issuance_total, b = q.drip_total;
           v = (a == null && b == null) ? null : (a || 0) + (b || 0);
+        } else if (row.key === '_operating_return') {
+          // Derived: net_inc_from_ops / nav_bop
+          const nio = q.net_inc_from_ops, bop = q.nav_bop;
+          v = (nio != null && bop != null && bop !== 0) ? nio / bop : null;
         } else {
           v = q[row.key];
         }
         let text = '—';
         let cls = 'val';
-        if (v != null && !Number.isNaN(v)) {
+        if (row.kind === 'text') {
+          // Plain string — used for source/provenance labels
+          if (v) { text = String(v); cls += ' dim'; }
+        } else if (v != null && !Number.isNaN(v)) {
           if (row.kind === 'money') {
             // Show as positive magnitude; if stored as negative, display in parens.
             text = fmtM(v);
@@ -274,6 +290,48 @@
   }
   html += '</tbody>';
   table.innerHTML = html;
+
+  // Performance-over-time chart — quarterly return % bars + cumulative line
+  const labels = quarters.map(q => q.quarter_label);
+  const qReturns = quarters.map(q => q.unified_return_pct != null ? q.unified_return_pct * 100 : null);
+  // Cumulative (compounded) return from first quarter
+  let cum = 1;
+  const cumReturns = quarters.map(q => {
+    if (q.unified_return_pct == null) return null;
+    cum *= (1 + q.unified_return_pct);
+    return (cum - 1) * 100;
+  });
+  const ctx = document.getElementById('perfChart').getContext('2d');
+  new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Quarterly return %',
+          data: qReturns, yAxisID: 'y1',
+          backgroundColor: qReturns.map(v => v == null ? '#ccc' : (v >= 0 ? 'rgba(46,160,67,0.7)' : 'rgba(207,34,46,0.7)')),
+          borderColor: 'rgba(0,0,0,0)' },
+        { type: 'line', label: 'Cumulative return %',
+          data: cumReturns, yAxisID: 'y2',
+          borderColor: '#1f5fa6', backgroundColor: '#1f5fa6',
+          borderWidth: 1.8, pointRadius: 0, tension: 0.15, spanGaps: true },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: {size:11}, boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toFixed(2)+'%' : '—'}` } },
+      },
+      scales: {
+        x: { ticks: { font: {size: 10}, maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+        y1: { position: 'left', ticks: { font: {size: 10}, callback: v => v.toFixed(1)+'%' },
+              title: { display: true, text: 'Quarterly %', font: {size: 10} } },
+        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: {size: 10}, callback: v => v.toFixed(0)+'%' },
+              title: { display: true, text: 'Cumulative %', font: {size: 10} } },
+      },
+    },
+  });
 })();
 </script>
 </body>
