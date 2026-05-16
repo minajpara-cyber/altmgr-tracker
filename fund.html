@@ -64,6 +64,9 @@
 
   const latest = quarters[quarters.length - 1];
   const first = quarters[0];
+  const summary = (data.summary_by_ticker || {})[ticker] || {};
+  // Year-to-date label: parse year from latest quarter label
+  const ytdYear = (latest.quarter_label || '').split(' ').pop() || '';
 
   root.className = '';
   const cikPadded = (universe.cik_padded || universe.cik || '').padStart(10, '0');
@@ -98,8 +101,10 @@
 
     <div class="stat-row">
       <div class="stat-card"><div class="label">Latest NAV</div><div class="value">${fmtM(latest.nav_eop)}</div><div class="sub">${latest.quarter_label}</div></div>
-      <div class="stat-card"><div class="label">NAV change (period)</div><div class="value ${signClass(latest.nav_change_pct)}">${fmtPctSigned(latest.nav_change_pct)}</div><div class="sub">vs prior period</div></div>
-      <div class="stat-card"><div class="label">Net capital activity (latest)</div><div class="value ${signClass(latest.net_capital_activity)}">${fmtM(latest.net_capital_activity)}</div><div class="sub">${latest.quarter_label}</div></div>
+      <div class="stat-card"><div class="label">Quarter return</div><div class="value ${signClass(summary.latest_return)}">${fmtPctSigned(summary.latest_return)}</div><div class="sub">${summary.latest_return_src || '—'}</div></div>
+      <div class="stat-card"><div class="label">YTD return</div><div class="value ${signClass(summary.ytd_return)}">${fmtPctSigned(summary.ytd_return)}</div><div class="sub">${ytdYear} so far</div></div>
+      <div class="stat-card"><div class="label">Trailing 12 mo</div><div class="value ${signClass(summary.ttm_return)}">${fmtPctSigned(summary.ttm_return)}</div><div class="sub">last 4 quarters</div></div>
+      <div class="stat-card"><div class="label">Trailing 3 yr</div><div class="value ${signClass(summary.y3_return)}">${fmtPctSigned(summary.y3_return)}</div><div class="sub">last 12 qtrs, cumulative</div></div>
       <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quarters.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
     </div>
 
@@ -124,6 +129,7 @@
       { label: 'NAV — end of period', key: 'nav_eop', kind: 'money' },
       { label: 'NAV change ($)', key: 'nav_change', kind: 'moneySigned' },
       { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
+      { label: 'Total return (%) — NAV bridge', key: 'bridge_return_pct', kind: 'pctSigned' },
     ]},
     { name: 'Flows', rows: [
       { label: 'Cash subscriptions', key: 'issuance_total', kind: 'money' },

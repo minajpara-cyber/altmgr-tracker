@@ -24,9 +24,11 @@
       <h3>Metric</h3>
       <select id="metric">
         <optgroup label="Stock measures">
+          <option value="unified_return_pct">Quarterly return % (best available)</option>
           <option value="nav_eop">NAV (end of quarter)</option>
           <option value="nav_change_pct">NAV change %</option>
           <option value="total_return_pct">Total return % (operating)</option>
+          <option value="bridge_return_pct">Total return % (NAV bridge — all funds)</option>
           <option value="per_share_return_class_i">Per-share total return % (Class I)</option>
           <option value="per_share_return_class_s">Per-share total return % (Class S)</option>
           <option value="per_share_return_class_d">Per-share total return % (Class D)</option>
@@ -174,6 +176,7 @@
 
   // Metrics whose values are inherently percentages — toggle is locked to %
   const INHERENT_PCT = new Set(['nav_change_pct', 'total_return_pct',
+    'bridge_return_pct', 'unified_return_pct',
     'per_share_return_class_i', 'per_share_return_class_s',
     'per_share_return_class_d', 'per_share_return_class_t',
     'per_share_return_class_e']);

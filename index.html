@@ -66,6 +66,13 @@
     if (iss != null || rep != null) {
       netFlow = (iss || 0) + (rep != null ? -Math.abs(rep) : 0);
     }
+    // Pull pre-computed rollups
+    const summary = (data.summary_by_ticker || {})[u.ticker] || {};
+    // Net flow as % of BOP NAV — comparable across fund sizes
+    let netFlowPct = null;
+    if (latest && latest.nav_bop && netFlow != null && latest.nav_bop !== 0) {
+      netFlowPct = netFlow / latest.nav_bop;
+    }
     rows.push({
       ticker: u.ticker,
       legal_name: u.legal_name,
@@ -77,6 +84,12 @@
       nav_eop: navEop,
       growth: latest ? latest.nav_change_pct : null,
       net_flow: netFlow,
+      net_flow_pct: netFlowPct,
+      latest_return: summary.latest_return ?? null,
+      return_src: summary.latest_return_src ?? null,
+      ytd_return: summary.ytd_return ?? null,
+      ttm_return: summary.ttm_return ?? null,
+      y3_return: summary.y3_return ?? null,
       n_periods: qs.length
     });
     if (u.sponsor) sponsorSet.add(u.sponsor);
@@ -121,23 +134,32 @@
     data: rows,
     layout: 'fitColumns',
     pagination: false,
-    height: '60vh',
-    initialSort: [{column: 'nav_eop', dir: 'desc'}],
+    height: '70vh',
+    initialSort: [{column: 'latest_return', dir: 'desc'}],
     columns: [
-      {title: 'Ticker', field: 'ticker', width: 110, formatter: (cell) => {
+      {title: 'Ticker', field: 'ticker', width: 95, formatter: (cell) => {
          const t = cell.getValue();
          return `<a href="./fund.html?ticker=${encodeURIComponent(t)}"><span class="ticker-badge">${t}</span></a>`;
       }},
-      {title: 'Legal Name', field: 'legal_name', minWidth: 220},
-      {title: 'Sponsor', field: 'sponsor', width: 90},
-      {title: 'Strategy', field: 'strategy', width: 95},
-      {title: 'Form Factor', field: 'form_factor', width: 110},
-      {title: 'Latest Period', field: 'latest_period', width: 110, cssClass: 'num'},
-      {title: 'Form', field: 'latest_form', width: 100},
-      {title: 'Latest NAV', field: 'nav_eop', width: 130, cssClass: 'num', formatter: moneyCell, sorter: 'number'},
-      {title: 'Period change', field: 'growth', width: 110, cssClass: 'num', formatter: pctSignedCell, sorter: 'number'},
-      {title: 'Net flow (latest)', field: 'net_flow', width: 140, cssClass: 'num', formatter: moneySignedCell, sorter: 'number'},
-      {title: '# Periods', field: 'n_periods', width: 90, cssClass: 'num'},
+      {title: 'Legal Name', field: 'legal_name', minWidth: 200},
+      {title: 'Sponsor', field: 'sponsor', width: 80},
+      {title: 'Strategy', field: 'strategy', width: 80},
+      {title: 'Latest Period', field: 'latest_period', width: 100, cssClass: 'num'},
+      {title: 'NAV ($M)', field: 'nav_eop', width: 110, cssClass: 'num', formatter: moneyCell, sorter: 'number'},
+      {title: 'Q Return', field: 'latest_return', width: 90, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Latest-quarter total return (NAV change + distribution / BOP NAV).'},
+      {title: 'YTD', field: 'ytd_return', width: 80, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Year-to-date return — compounded quarters in the current calendar year'},
+      {title: 'TTM', field: 'ttm_return', width: 80, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Trailing 12 months — last 4 quarters compounded'},
+      {title: '3-yr', field: 'y3_return', width: 80, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Last 12 quarters compounded (not annualized)'},
+      {title: 'NAV chg %', field: 'growth', width: 90, cssClass: 'num', formatter: pctSignedCell, sorter: 'number'},
+      {title: 'Net flow $M', field: 'net_flow', width: 110, cssClass: 'num', formatter: moneySignedCell, sorter: 'number',
+        headerTooltip: 'Issuance + DRIP − Repurchases (latest period)'},
+      {title: 'Flow % NAV', field: 'net_flow_pct', width: 100, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Net capital activity as % of BOP NAV — comparable across fund sizes'},
+      {title: '# Q', field: 'n_periods', width: 60, cssClass: 'num'},
     ],
   });
 
