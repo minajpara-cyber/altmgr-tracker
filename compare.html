@@ -27,6 +27,9 @@
           <option value="nav_eop">NAV (end of quarter)</option>
           <option value="nav_change_pct">NAV change %</option>
           <option value="total_return_pct">Total return % (operating)</option>
+          <option value="per_share_return_class_i">Per-share total return % (Class I)</option>
+          <option value="per_share_return_class_s">Per-share total return % (Class S)</option>
+          <option value="per_share_return_class_d">Per-share total return % (Class D)</option>
         </optgroup>
         <optgroup label="Flow measures">
           <option value="issuance_total">Cash subscriptions</option>
@@ -170,7 +173,10 @@
     r.addEventListener('change', update));
 
   // Metrics whose values are inherently percentages — toggle is locked to %
-  const INHERENT_PCT = new Set(['nav_change_pct', 'total_return_pct']);
+  const INHERENT_PCT = new Set(['nav_change_pct', 'total_return_pct',
+    'per_share_return_class_i', 'per_share_return_class_s',
+    'per_share_return_class_d', 'per_share_return_class_t',
+    'per_share_return_class_e']);
   // Metrics that don't make sense to express as % of NAV
   const STOCK_METRICS = new Set(['nav_eop']);
   // Outflow metrics that should display as negatives even when stored positive

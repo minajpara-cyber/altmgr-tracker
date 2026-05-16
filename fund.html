@@ -189,11 +189,18 @@
         kind: 'int',
       });
     }
-    // Per-share quarterly return %, computed for each class that has data
+    // Distribution per share (fund-level approximation: |distributions_total| / total shares outstanding)
+    psRows.push({
+      label: `Distribution / share`,
+      key: 'dist_per_share',
+      kind: 'usd',
+    });
+    // Per-share quarterly TOTAL return (NAV change + distribution per share),
+    // already precomputed in 09_quarterize.py per class.
     for (const c of classesWithData) {
       psRows.push({
-        label: `Per-share return (%) — Class ${c.toUpperCase()}`,
-        key: '_per_share_return_class_' + c,
+        label: `Total return (%) — Class ${c.toUpperCase()}`,
+        key: 'per_share_return_class_' + c,
         kind: 'pctSigned',
       });
     }
@@ -222,14 +229,6 @@
         if (row.key === '_total_subscriptions') {
           const a = q.issuance_total, b = q.drip_total;
           v = (a == null && b == null) ? null : (a || 0) + (b || 0);
-        } else if (row.key && row.key.startsWith('_per_share_return_class_')) {
-          // (nav_eop_per_share - nav_bop_per_share) / nav_bop_per_share
-          const c = row.key.slice('_per_share_return_class_'.length);
-          const eop = q['nav_per_share_class_' + c];
-          // BOP = prior quarter's EOP (same class)
-          const prev = qi > 0 ? quarters[qi - 1] : null;
-          const bop = prev ? prev['nav_per_share_class_' + c] : null;
-          v = (eop != null && bop != null && bop !== 0) ? (eop - bop) / bop : null;
         } else {
           v = q[row.key];
         }
