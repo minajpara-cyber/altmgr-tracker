@@ -126,10 +126,11 @@
       { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
     ]},
     { name: 'Flows', rows: [
-      { label: 'Subscriptions (issuance)', key: 'issuance_total', kind: 'money' },
+      { label: 'Cash subscriptions', key: 'issuance_total', kind: 'money' },
       { label: 'DRIP', key: 'drip_total', kind: 'money' },
-      { label: 'Redemptions / repurchases', key: 'repurchases_total', kind: 'moneyNeg' },
-      { label: 'Distributions paid', key: 'distributions_total', kind: 'moneyNeg' },
+      { label: 'Total subscriptions', key: '_total_subscriptions', kind: 'money' },
+      { label: 'Redemptions', key: 'repurchases_total', kind: 'moneyNeg' },
+      { label: 'Distributions', key: 'distributions_total', kind: 'moneyNeg' },
       { label: 'Net capital activity', key: 'net_capital_activity', kind: 'moneySigned' },
     ]},
     { name: 'Income / P&L', rows: [
@@ -149,6 +150,56 @@
     ]},
   ];
 
+  // ---- Per-share section (only for funds that have any per-share data) ----
+  // Multi-class share classes: I, S, D, T, E (in priority order — I usually
+  // dominates). We show NAV/share + shares outstanding by class, plus a
+  // quarterly per-share return % computed from class I (the dominant class
+  // for every multi-class fund in the universe).
+  const SHARE_CLASSES = ['i', 's', 'd', 't', 'e'];
+  const hasPerShare = quarters.some(q =>
+    SHARE_CLASSES.some(c =>
+      q['nav_per_share_class_' + c] != null ||
+      q['shares_outstanding_class_' + c] != null
+    )
+  );
+
+  let PER_SHARE_SECTION = null;
+  if (hasPerShare) {
+    // Only show classes that actually have data in at least one quarter.
+    const classesWithData = SHARE_CLASSES.filter(c =>
+      quarters.some(q =>
+        q['nav_per_share_class_' + c] != null ||
+        q['shares_outstanding_class_' + c] != null
+      )
+    );
+    const psRows = [];
+    // NAV / share by class
+    for (const c of classesWithData) {
+      psRows.push({
+        label: `NAV / share — Class ${c.toUpperCase()}`,
+        key: 'nav_per_share_class_' + c,
+        kind: 'usd',
+      });
+    }
+    // Shares outstanding by class
+    for (const c of classesWithData) {
+      psRows.push({
+        label: `Shares outstanding — Class ${c.toUpperCase()}`,
+        key: 'shares_outstanding_class_' + c,
+        kind: 'int',
+      });
+    }
+    // Per-share quarterly return %, computed for each class that has data
+    for (const c of classesWithData) {
+      psRows.push({
+        label: `Per-share return (%) — Class ${c.toUpperCase()}`,
+        key: '_per_share_return_class_' + c,
+        kind: 'pctSigned',
+      });
+    }
+    PER_SHARE_SECTION = { name: 'Per share', rows: psRows };
+  }
+
   // Header row: empty corner + quarter labels
   let html = '<thead><tr><th class="row-label">Metric \\ Period</th>';
   for (const q of quarters) {
@@ -160,12 +211,28 @@
   }
   html += '</tr></thead><tbody>';
 
-  for (const section of SECTIONS) {
+  const allSections = PER_SHARE_SECTION ? SECTIONS.concat([PER_SHARE_SECTION]) : SECTIONS;
+  for (const section of allSections) {
     html += `<tr class="section-row"><td colspan="${quarters.length + 1}">${section.name}</td></tr>`;
     for (const row of section.rows) {
       html += `<tr><td class="row-label">${row.label}</td>`;
-      for (const q of quarters) {
-        const v = q[row.key];
+      for (let qi = 0; qi < quarters.length; qi++) {
+        const q = quarters[qi];
+        let v;
+        if (row.key === '_total_subscriptions') {
+          const a = q.issuance_total, b = q.drip_total;
+          v = (a == null && b == null) ? null : (a || 0) + (b || 0);
+        } else if (row.key && row.key.startsWith('_per_share_return_class_')) {
+          // (nav_eop_per_share - nav_bop_per_share) / nav_bop_per_share
+          const c = row.key.slice('_per_share_return_class_'.length);
+          const eop = q['nav_per_share_class_' + c];
+          // BOP = prior quarter's EOP (same class)
+          const prev = qi > 0 ? quarters[qi - 1] : null;
+          const bop = prev ? prev['nav_per_share_class_' + c] : null;
+          v = (eop != null && bop != null && bop !== 0) ? (eop - bop) / bop : null;
+        } else {
+          v = q[row.key];
+        }
         let text = '—';
         let cls = 'val';
         if (v != null && !Number.isNaN(v)) {
@@ -187,6 +254,11 @@
             cls += ' ' + signClass(v);
           } else if (row.kind === 'pct') {
             text = fmtPct(v);
+          } else if (row.kind === 'usd') {
+            // Per-share NAV in dollars (e.g. $24.19), not millions.
+            text = fmtUsd(v);
+          } else if (row.kind === 'int') {
+            text = fmtInt(v);
           }
         }
         if (q.source_form === 'derived-Q4') cls += ' derived';

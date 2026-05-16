@@ -29,7 +29,9 @@
           <option value="total_return_pct">Total return % (operating)</option>
         </optgroup>
         <optgroup label="Flow measures">
-          <option value="issuance_total">Subscriptions (issuance)</option>
+          <option value="issuance_total">Cash subscriptions</option>
+          <option value="drip_total">DRIP</option>
+          <option value="total_subscriptions">Total subscriptions (cash + DRIP)</option>
           <option value="repurchases_total">Redemptions (repurchases)</option>
           <option value="distributions_total">Distributions paid</option>
           <option value="net_capital_activity">Net capital activity</option>
@@ -182,7 +184,13 @@
       if (nio == null || bop == null || bop === 0) return null;
       return nio / bop;
     }
-    let v = q[metric];
+    let v;
+    if (metric === 'total_subscriptions') {
+      const a = q.issuance_total, b = q.drip_total;
+      v = (a == null && b == null) ? null : (a || 0) + (b || 0);
+    } else {
+      v = q[metric];
+    }
     if (v == null) return null;
     if (NEG_METRICS.has(metric) && v > 0) v = -v;
     if (isPctMode && !INHERENT_PCT.has(metric) && !STOCK_METRICS.has(metric)) {

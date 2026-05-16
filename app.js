@@ -41,6 +41,13 @@ function fmtInt(v) {
   return v.toLocaleString();
 }
 
+// Per-share NAV in dollars (typically $20-$30 range). Negatives parenthesized.
+function fmtUsd(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const body = '$' + Math.abs(v).toFixed(2);
+  return v < 0 ? '(' + body + ')' : body;
+}
+
 function fmtDate(v) {
   if (!v) return '—';
   return v.substring(0, 10);
