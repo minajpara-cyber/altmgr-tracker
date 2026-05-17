@@ -13,6 +13,7 @@
     <a href="./index.html">Universe</a>
     <a href="./fund.html">Fund</a>
     <a href="./compare.html" class="active">Compare</a>
+    <a href="./filings.html">Filings</a>
   </nav>
   <div class="meta" id="refresh-meta">Loading…</div>
 </header>
@@ -68,8 +69,11 @@
         <label>Max: <input type="number" id="y-max" style="width:70px;" step="any"></label>
       </div>
 
-      <h3>Quick select</h3>
-      <div class="chip-row" id="chip-row"></div>
+      <h3>By manager</h3>
+      <div class="chip-row" id="manager-chip-row"></div>
+
+      <h3>By strategy / type</h3>
+      <div class="chip-row" id="strategy-chip-row"></div>
 
       <h3>Funds</h3>
       <input type="text" id="ticker-search" placeholder="filter tickers…">
@@ -148,33 +152,67 @@
   }
   document.getElementById('ticker-search').addEventListener('input', e => renderList(e.target.value));
 
-  const chips = [
-    { label: 'All', filter: () => true },
-    { label: 'Clear', filter: () => false },
-    { label: 'Credit', filter: t => universeByTicker[t].strategy === 'Credit' },
-    { label: 'RE', filter: t => universeByTicker[t].strategy === 'RE' },
-    { label: 'PE', filter: t => universeByTicker[t].strategy === 'PE' },
-    { label: 'Infra', filter: t => universeByTicker[t].strategy === 'Infra' },
-    { label: 'BX', filter: t => universeByTicker[t].sponsor === 'BX' },
-    { label: 'OWL', filter: t => universeByTicker[t].sponsor === 'OWL' },
-    { label: 'APO', filter: t => universeByTicker[t].sponsor === 'APO' },
-    { label: 'KKR', filter: t => universeByTicker[t].sponsor === 'KKR' },
-    { label: 'ARES', filter: t => universeByTicker[t].sponsor === 'ARES' },
-    { label: 'BDCs', filter: t => universeByTicker[t].form_factor === 'nt-BDC' },
-    { label: 'REITs', filter: t => universeByTicker[t].form_factor === 'nt-REIT' },
-  ];
-  const chipRow = document.getElementById('chip-row');
-  for (const c of chips) {
+  // Build manager + strategy chips dynamically from the universe so every
+  // manager / strategy / form factor in the data shows up automatically.
+  const allSponsors = [...new Set(tickers.map(t => universeByTicker[t].sponsor).filter(Boolean))].sort();
+  const allStrategies = [...new Set(tickers.map(t => universeByTicker[t].strategy).filter(Boolean))].sort();
+  const allFormFactors = [...new Set(tickers.map(t => universeByTicker[t].form_factor).filter(Boolean))].sort();
+
+  function selectByFilter(filter) {
+    selected.clear();
+    for (const t of tickers) if (filter(t)) selected.add(t);
+    renderList(document.getElementById('ticker-search').value);
+    update();
+  }
+  function makeChip(rowEl, label, filter, title) {
     const btn = document.createElement('button');
     btn.className = 'chip';
-    btn.textContent = c.label;
-    btn.addEventListener('click', () => {
-      selected.clear();
-      for (const t of tickers) if (c.filter(t)) selected.add(t);
-      renderList(document.getElementById('ticker-search').value);
-      update();
-    });
-    chipRow.appendChild(btn);
+    btn.textContent = label;
+    if (title) btn.title = title;
+    btn.addEventListener('click', () => selectByFilter(filter));
+    rowEl.appendChild(btn);
+    return btn;
+  }
+
+  // ---- Manager toggles ----
+  const managerRow = document.getElementById('manager-chip-row');
+  makeChip(managerRow, 'All', () => true, 'Select all funds');
+  makeChip(managerRow, 'Clear', () => false, 'Clear selection');
+  for (const sponsor of allSponsors) {
+    const count = tickers.filter(t => universeByTicker[t].sponsor === sponsor).length;
+    makeChip(managerRow, `${sponsor} (${count})`,
+      t => universeByTicker[t].sponsor === sponsor,
+      `Select all ${sponsor} funds (${count})`);
+  }
+
+  // ---- Strategy / type toggles ----
+  // Strategies first (Credit, RE, PE, Infra), then form factors (BDC, REIT, IF, etc.)
+  const strategyRow = document.getElementById('strategy-chip-row');
+  makeChip(strategyRow, 'All', () => true, 'Select all funds');
+  makeChip(strategyRow, 'Clear', () => false, 'Clear selection');
+  // Friendly labels for compact form-factor codes
+  const FORM_LABEL = {
+    'nt-BDC': 'NT-BDC',
+    'nt-REIT': 'NT-REIT',
+    'MA-perp': 'MA-Perpetual',
+    'IF': 'Interval Fund',
+    'TF': 'Tender Fund',
+  };
+  for (const strategy of allStrategies) {
+    const count = tickers.filter(t => universeByTicker[t].strategy === strategy).length;
+    makeChip(strategyRow, `${strategy} (${count})`,
+      t => universeByTicker[t].strategy === strategy,
+      `Select all ${strategy} funds (${count})`);
+  }
+  // Add a small divider before form-factor chips
+  const sep = document.createElement('span');
+  sep.style.cssText = 'display:inline-block;width:1px;height:14px;background:var(--border);margin:0 4px;vertical-align:middle;';
+  strategyRow.appendChild(sep);
+  for (const ff of allFormFactors) {
+    const count = tickers.filter(t => universeByTicker[t].form_factor === ff).length;
+    makeChip(strategyRow, `${FORM_LABEL[ff] || ff} (${count})`,
+      t => universeByTicker[t].form_factor === ff,
+      `Select all ${FORM_LABEL[ff] || ff} funds (${count})`);
   }
 
   document.getElementById('metric').addEventListener('change', update);

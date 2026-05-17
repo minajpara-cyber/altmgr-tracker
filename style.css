@@ -459,3 +459,17 @@ table.qtable td.val.neg  { color: var(--neg); }
 table.qtable td.val.zero { color: var(--text-faint); }
 table.qtable td.val.derived { background: rgba(196, 122, 0, 0.06); }
 
+
+/* --- Filings tab badges --- */
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+  margin-left: 4px;
+}
+.badge-new    { background: #1d6f3d; color: #d4f5e0; }
+.badge-recent { background: #4a5a2a; color: #e8f0c5; }

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Filings — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html">Compare</a>
+    <a href="./filings.html" class="active">Filings</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>Recent SEC filings</h1>
+  <p class="muted" style="margin-top:-4px">
+    Every filing we've indexed from EDGAR, newest first. Use this to see
+    when each fund last published data, and what's just landed.
+  </p>
+
+  <div class="stat-row" id="stat-row">
+    <div class="stat-card"><div class="label">Total filings indexed</div><div class="value" id="stat-total">…</div></div>
+    <div class="stat-card"><div class="label">Last 30 days</div><div class="value" id="stat-30d">…</div></div>
+    <div class="stat-card"><div class="label">Last 7 days</div><div class="value" id="stat-7d">…</div></div>
+    <div class="stat-card"><div class="label">Most recent</div><div class="value" id="stat-latest">…</div><div class="sub" id="stat-latest-sub"></div></div>
+  </div>
+
+  <div class="table-toolbar">
+    <input type="text" id="search" placeholder="filter by ticker, fund name, sponsor, form…">
+    <select id="form-filter"><option value="">All form types</option></select>
+    <select id="sponsor-filter"><option value="">All sponsors</option></select>
+    <select id="range-filter">
+      <option value="">All time</option>
+      <option value="7">Last 7 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="365">Last 12 months</option>
+    </select>
+  </div>
+  <div id="filings-table"></div>
+</main>
+
+<footer class="sitefoot">
+  Data extracted from SEC EDGAR. All filings link to the primary document on sec.gov.
+</footer>
+
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="./app.js"></script>
+<script>
+(async function() {
+  paintRefreshDate();
+  let data;
+  try { data = await loadData(); } catch { return; }
+
+  const filings = data.filings || [];
+  const today = new Date();
+  const daysAgo = (n) => {
+    const d = new Date(today); d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Stats
+  const t30 = daysAgo(30);
+  const t7 = daysAgo(7);
+  document.getElementById('stat-total').textContent = filings.length.toLocaleString();
+  document.getElementById('stat-30d').textContent = filings.filter(f => f.filing_date >= t30).length.toLocaleString();
+  document.getElementById('stat-7d').textContent = filings.filter(f => f.filing_date >= t7).length.toLocaleString();
+  if (filings.length) {
+    document.getElementById('stat-latest').textContent = filings[0].filing_date;
+    document.getElementById('stat-latest-sub').textContent =
+      `${filings[0].ticker} · ${filings[0].form}`;
+  }
+
+  // Populate filters
+  const forms = [...new Set(filings.map(f => f.form))].sort();
+  const sponsors = [...new Set(filings.map(f => f.sponsor).filter(Boolean))].sort();
+  const formSel = document.getElementById('form-filter');
+  forms.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; formSel.appendChild(o); });
+  const sponSel = document.getElementById('sponsor-filter');
+  sponsors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sponSel.appendChild(o); });
+
+  const table = new Tabulator('#filings-table', {
+    data: filings,
+    layout: 'fitColumns',
+    pagination: 'local',
+    paginationSize: 50,
+    paginationSizeSelector: [25, 50, 100, 250],
+    movableColumns: true,
+    initialSort: [{column: 'filing_date', dir: 'desc'}],
+    columns: [
+      {title: 'Date', field: 'filing_date', width: 110, sorter: 'string',
+       formatter: function(cell) {
+         const v = cell.getValue() || '';
+         const d = new Date(v);
+         const ageDays = Math.floor((today - d) / 86400000);
+         let badge = '';
+         if (ageDays <= 7) badge = ' <span class="badge badge-new">NEW</span>';
+         else if (ageDays <= 30) badge = ' <span class="badge badge-recent">RECENT</span>';
+         return v + badge;
+       }},
+      {title: 'Ticker', field: 'ticker', width: 100, headerFilter: false,
+       formatter: function(cell) {
+         const t = cell.getValue();
+         return `<a href="./fund.html?ticker=${encodeURIComponent(t)}" style="color:inherit;font-weight:600">${t}</a>`;
+       }},
+      {title: 'Fund', field: 'legal_name', widthGrow: 2, headerFilter: false},
+      {title: 'Sponsor', field: 'sponsor', width: 100},
+      {title: 'Form', field: 'form', width: 110},
+      {title: 'Period', field: 'period_of_report', width: 110},
+      {title: 'Filing', field: 'filing_url', width: 110, headerSort: false,
+       formatter: function(cell) {
+         const url = cell.getValue();
+         if (!url) return '';
+         return `<a href="${url}" target="_blank" rel="noopener" style="color:#5fb3ff">SEC →</a>`;
+       }},
+    ],
+  });
+
+  function applyFilters() {
+    const search = document.getElementById('search').value.toLowerCase().trim();
+    const formV = document.getElementById('form-filter').value;
+    const sponV = document.getElementById('sponsor-filter').value;
+    const rangeV = document.getElementById('range-filter').value;
+    const cutoff = rangeV ? daysAgo(parseInt(rangeV, 10)) : '';
+    table.setFilter(function(row) {
+      if (formV && row.form !== formV) return false;
+      if (sponV && row.sponsor !== sponV) return false;
+      if (cutoff && (row.filing_date || '') < cutoff) return false;
+      if (search) {
+        const haystack = `${row.ticker || ''} ${row.legal_name || ''} ${row.sponsor || ''} ${row.form || ''}`.toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+  }
+  ['search', 'form-filter', 'sponsor-filter', 'range-filter'].forEach(id => {
+    document.getElementById(id).addEventListener('input', applyFilters);
+  });
+})();
+</script>
+</body>
+</html>
