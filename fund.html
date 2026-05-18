@@ -295,7 +295,25 @@
           }
         }
         if (q.source_form === 'derived-Q4') cls += ' derived';
-        html += `<td class="${cls}">${text}</td>`;
+        // Interpolated fee/expense cells: when quarterize splits H1/FY
+        // cumulative values across quarters (NAV-weighted), flag the cell
+        // with an "interp" superscript and tinted background so users see
+        // these are estimates, not directly reported.
+        const interpFields = (q.interpolated_fields || '').split(',').filter(Boolean);
+        let tooltip = '';
+        if (interpFields.includes(row.key) && v != null) {
+          cls += ' interpolated';
+          const src = q.fee_interp_source || '';
+          const method = q.fee_interp_method || 'NAV-weighted';
+          // Incentive fees use return-weighting (performance-driven);
+          // others use NAV-weighting.
+          const weightNote = (row.key === 'incentive_fee_income_based'
+                              ? 'return-weighted (max(0, quarterly return))'
+                              : 'NAV-weighted (avg of BOP/EOP)');
+          text = `${text} <sup style="font-size:9px;color:var(--accent);font-weight:600;letter-spacing:0.02em">interp</sup>`;
+          tooltip = ` title="Interpolated single-quarter value — ${weightNote} split of ${src}. Quarter values sum to the reported H1 / FY cumulative."`;
+        }
+        html += `<td class="${cls}"${tooltip}>${text}</td>`;
       }
       html += '</tr>';
     }

@@ -485,3 +485,17 @@ table.qtable td.val.summary {
   border-left: 2px solid var(--border-strong, #555);
   font-weight: 600;
 }
+
+/* --- N-CSR / N-CSRS overlay cells (cumulative H1 or FY figures shown in NPORT fund tables) --- */
+table.qtable td.val.overlay-period {
+  background: rgba(95, 179, 255, 0.06);
+}
+
+/* --- Interpolated fee/expense cells (NPORT funds, H1/FY split into quarters) --- */
+table.qtable td.val.interpolated {
+  background: rgba(95, 179, 255, 0.06);
+  font-style: italic;
+}
+table.qtable td.val.interpolated sup {
+  font-style: normal;
+}
