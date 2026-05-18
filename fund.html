@@ -102,7 +102,7 @@
     </div>
 
     <div class="stat-row">
-      <div class="stat-card"><div class="label">Latest NAV</div><div class="value">${fmtM(latest.nav_eop)}</div><div class="sub">${latest.quarter_label}</div></div>
+      <div class="stat-card"><div class="label">Latest NAV</div><div class="value">${fmtM(latest.fund_nav_usd != null ? latest.fund_nav_usd : latest.nav_eop)}${latest.dst_nav_usd ? ` <span style="font-size:12px;color:var(--muted)">(+${fmtM(latest.dst_nav_usd)} DST)</span>` : ''}</div><div class="sub">${latest.quarter_label}${latest.fund_nav_usd != null ? ' · Fund NAV' : ''}</div></div>
       <div class="stat-card"><div class="label">Quarter return</div><div class="value ${signClass(summary.latest_return)}">${fmtPctSigned(summary.latest_return)}</div><div class="sub">${summary.latest_return_src || '—'}</div></div>
       <div class="stat-card"><div class="label">YTD return</div><div class="value ${signClass(summary.ytd_return)}">${fmtPctSigned(summary.ytd_return)}</div><div class="sub">${ytdYear} so far</div></div>
       <div class="stat-card"><div class="label">Trailing 12 mo</div><div class="value ${signClass(summary.ttm_return)}">${fmtPctSigned(summary.ttm_return)}</div><div class="sub">last 4 quarters</div></div>
@@ -137,7 +137,9 @@
     ]},
     { name: 'NAV', rows: [
       { label: 'NAV — beginning of period', key: 'nav_bop', kind: 'money' },
-      { label: 'NAV — end of period', key: 'nav_eop', kind: 'money' },
+      { label: 'NAV — end of period (GAAP equity)', key: 'nav_eop', kind: 'money' },
+      { label: 'Fund NAV (manager-published, REITs only)', key: 'fund_nav_usd', kind: 'money' },
+      { label: 'DST sleeve NAV (Ares REITs only)', key: 'dst_nav_usd', kind: 'money' },
       { label: 'NAV change ($)', key: 'nav_change', kind: 'moneySigned' },
       { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
     ]},
