@@ -70,9 +70,14 @@
     if (navTotal != null) { totalNav += navTotal; totalNavCount++; }
     const iss = latest ? latest.issuance_total : null;
     const rep = latest ? latest.repurchases_total : null;
+    const dstIn = latest ? latest.dst_proceeds_usd : null;   // Ares REITs only
+    const dstOut = latest ? latest.dst_redemptions_usd : null;
     let netFlow = null;
-    if (iss != null || rep != null) {
-      netFlow = (iss || 0) + (rep != null ? -Math.abs(rep) : 0);
+    if (iss != null || rep != null || dstIn != null || dstOut != null) {
+      // Net flow = all subscriptions (common + DST) - all redemptions (common + DST cash payouts)
+      netFlow = (iss || 0) + (dstIn || 0)
+                + (rep != null ? -Math.abs(rep) : 0)
+                + (dstOut != null ? -Math.abs(dstOut) : 0);
     }
     // Pull pre-computed rollups
     const summary = (data.summary_by_ticker || {})[u.ticker] || {};

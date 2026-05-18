@@ -144,10 +144,13 @@
       { label: 'NAV change (%)', key: 'nav_change_pct', kind: 'pctSigned' },
     ]},
     { name: 'Flows', rows: [
-      { label: 'Cash subscriptions', key: 'issuance_total', kind: 'money' },
+      { label: 'Cash subscriptions (common / REIT)', key: 'issuance_total', kind: 'money' },
       { label: 'DRIP', key: 'drip_total', kind: 'money' },
-      { label: 'Total subscriptions', key: '_total_subscriptions', kind: 'money' },
+      { label: 'DST proceeds (new 1031 capital)', key: 'dst_proceeds_usd', kind: 'money' },
+      { label: 'Total subscriptions (REIT + DST)', key: '_total_subscriptions', kind: 'money' },
       { label: 'Redemptions', key: 'repurchases_total', kind: 'moneyNeg' },
+      { label: 'DST cash payouts', key: 'dst_redemptions_usd', kind: 'moneyNeg' },
+      { label: 'OP unit ← DST conversion (intra-platform, not new $)', key: 'op_unit_dst_conversion_usd', kind: 'money' },
       { label: 'Distributions', key: 'distributions_total', kind: 'moneyNeg' },
       { label: 'Net capital activity', key: 'net_capital_activity', kind: 'moneySigned' },
     ]},
@@ -163,6 +166,7 @@
     ]},
     { name: 'Balance sheet (point-in-time)', rows: [
       { label: 'Total assets', key: 'total_assets', kind: 'money' },
+      { label: 'Total liabilities', key: 'total_liabilities', kind: 'money' },
       { label: 'Total debt', key: 'total_debt', kind: 'money' },
       { label: 'Total net assets / equity', key: 'total_net_assets_or_equity', kind: 'money' },
     ]},
@@ -245,8 +249,13 @@
         const q = quarters[qi];
         let v;
         if (row.key === '_total_subscriptions') {
-          const a = q.issuance_total, b = q.drip_total;
-          v = (a == null && b == null) ? null : (a || 0) + (b || 0);
+          // All new investor money in: common stock + DRIP + DST proceeds.
+          // DST proceeds are gross 1031-exchange capital sold this quarter
+          // (Ares REITs only). Excludes OP-unit ← DST conversions, which
+          // are intra-platform reclassifications, not new money.
+          const a = q.issuance_total, b = q.drip_total, c = q.dst_proceeds_usd;
+          const parts = [a, b, c].filter(x => x != null);
+          v = parts.length ? parts.reduce((s, x) => s + x, 0) : null;
         } else if (row.key === '_operating_return') {
           // Derived: net_inc_from_ops / nav_bop
           const nio = q.net_inc_from_ops, bop = q.nav_bop;
