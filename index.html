@@ -59,8 +59,15 @@
   for (const u of data.universe) {
     const qs = byTicker.get(u.ticker) || [];
     const latest = qs.length ? qs[qs.length - 1] : null;
-    const navEop = latest ? latest.nav_eop : null;
-    if (navEop != null) { totalNav += navEop; totalNavCount++; }
+    // For REITs we prefer Fund NAV (fair-value, manager-published) over GAAP
+    // equity. fund_nav_usd is populated only for REITs; for everything else
+    // (BDCs, NPORT funds, PE perpetuals) nav_eop already reflects fair-value
+    // since those vehicles mark-to-market under their accounting regimes.
+    const fundNav = latest ? latest.fund_nav_usd : null;
+    const dstNav = latest ? latest.dst_nav_usd : null;
+    const navEop = (fundNav != null ? fundNav : (latest ? latest.nav_eop : null));
+    const navTotal = navEop != null ? navEop + (dstNav || 0) : null;
+    if (navTotal != null) { totalNav += navTotal; totalNavCount++; }
     const iss = latest ? latest.issuance_total : null;
     const rep = latest ? latest.repurchases_total : null;
     let netFlow = null;
@@ -83,6 +90,8 @@
       latest_period: latest ? latest.quarter_label : null,
       latest_form: latest ? latest.source_form : null,
       nav_eop: navEop,
+      dst_nav: dstNav,
+      nav_total: navTotal,
       growth: latest ? latest.nav_change_pct : null,
       net_flow: netFlow,
       net_flow_pct: netFlowPct,
@@ -146,7 +155,19 @@
       {title: 'Sponsor', field: 'sponsor', width: 80},
       {title: 'Strategy', field: 'strategy', width: 80},
       {title: 'Latest Period', field: 'latest_period', width: 100, cssClass: 'num'},
-      {title: 'NAV ($M)', field: 'nav_eop', width: 110, cssClass: 'num', formatter: moneyCell, sorter: 'number'},
+      {title: 'NAV ($M)', field: 'nav_eop', width: 110, cssClass: 'num', formatter: (cell) => {
+        const r = cell.getRow().getData();
+        const main = cell.getValue();
+        if (main == null) return '—';
+        if (r.dst_nav) {
+          // Show "$3,391 (+$2,470 DST)" — fund NAV with DST sleeve breakdown
+          return `${fmtM(main)} <span class="muted" style="font-size:11px">(+${fmtM(r.dst_nav)} DST)</span>`;
+        }
+        return fmtM(main);
+      }, sorter: 'number',
+       headerTooltip: 'Latest reported NAV. For REITs, this is the manager-published "Aggregate Fund NAV" (fair value), not GAAP equity. Ares REITs show a separate DST Program sleeve.'},
+      {title: 'Total NAV', field: 'nav_total', width: 100, cssClass: 'num', formatter: moneyCell, sorter: 'number', visible: false,
+       headerTooltip: 'Fund NAV + DST sleeve. Used for sorting/total only when DST is relevant.'},
       {title: 'Q Return', field: 'latest_return', width: 90, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
         headerTooltip: 'Latest-quarter total return (NAV change + distribution / BOP NAV).'},
       {title: 'YTD', field: 'ytd_return', width: 80, cssClass: 'num', formatter: pctSignedCell, sorter: 'number',
