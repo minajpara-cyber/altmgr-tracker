@@ -473,3 +473,15 @@ table.qtable td.val.derived { background: rgba(196, 122, 0, 0.06); }
 }
 .badge-new    { background: #1d6f3d; color: #d4f5e0; }
 .badge-recent { background: #4a5a2a; color: #e8f0c5; }
+
+/* --- Compare-table summary columns (Latest / TTM) --- */
+table.qtable thead th.qhead:nth-last-child(-n+2) {
+  background: var(--accent-soft, rgba(95, 179, 255, 0.08));
+  border-left: 2px solid var(--border-strong, #555);
+  font-weight: 700;
+}
+table.qtable td.val.summary {
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--border-strong, #555);
+  font-weight: 600;
+}

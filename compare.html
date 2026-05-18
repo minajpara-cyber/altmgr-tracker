@@ -409,19 +409,57 @@
     });
 
     // Transposed comparison table — rows = funds, cols = quarter labels
-    renderCompareTable(metric, isPct, labels);
+    renderCompareTable(metric, isPct, finalLabels);
   }
 
   function renderCompareTable(metric, isPct, labels) {
     const table = document.getElementById('cmpTable');
-    if (!labels.length || !selected.size) { table.innerHTML = ''; return; }
+    if (!labels || !labels.length || !selected.size) {
+      table.innerHTML = '<tbody><tr><td class="row-label">Select at least one fund to see data.</td></tr></tbody>';
+      return;
+    }
     let html = '<thead><tr><th class="row-label">Ticker</th>';
     for (const lbl of labels) html += `<th class="qhead">${lbl}</th>`;
+    html += '<th class="qhead">Latest</th><th class="qhead">TTM sum / avg</th>';
     html += '</tr></thead><tbody>';
-    for (const t of [...selected].sort()) {
+    // Sort funds by latest non-null value descending (so most-active fund on top)
+    const tickersOrdered = [...selected].map(t => {
+      const arr = quartersByTicker.get(t) || [];
+      let latestVal = null;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const v = computeMetricValue(arr[i], metric, isPct);
+        if (v != null) { latestVal = v; break; }
+      }
+      return { t, latestVal };
+    });
+    tickersOrdered.sort((a, b) => {
+      if (a.latestVal == null && b.latestVal == null) return a.t.localeCompare(b.t);
+      if (a.latestVal == null) return 1;
+      if (b.latestVal == null) return -1;
+      return Math.abs(b.latestVal) - Math.abs(a.latestVal);
+    });
+    for (const {t, latestVal} of tickersOrdered) {
       const arr = quartersByTicker.get(t) || [];
       const byLabel = Object.fromEntries(arr.map(q => [q.quarter_label, q]));
-      html += `<tr><td class="row-label"><a href="./fund.html?ticker=${t}">${t}</a></td>`;
+      // TTM rollup: sum for flows / dollars, geometric compound for pct
+      const allVals = arr.map(q => computeMetricValue(q, metric, isPct)).filter(v => v != null);
+      const ttmVals = allVals.slice(-4);
+      let ttmAgg = null;
+      if (ttmVals.length) {
+        if (isPct) {
+          // Compound return
+          let v = 1;
+          for (const r of ttmVals) v *= (1 + r);
+          ttmAgg = v - 1;
+        } else {
+          // Sum dollar values
+          ttmAgg = ttmVals.reduce((s, x) => s + x, 0);
+        }
+      }
+      const swatch = colorByTicker[t]
+        ? `<span style="display:inline-block;width:8px;height:8px;background:${colorByTicker[t]};border-radius:1px;margin-right:5px;vertical-align:0px;"></span>`
+        : '';
+      html += `<tr><td class="row-label">${swatch}<a href="./fund.html?ticker=${t}" style="color:inherit;text-decoration:none;font-weight:600">${t}</a></td>`;
       for (const lbl of labels) {
         const q = byLabel[lbl];
         const v = computeMetricValue(q, metric, isPct);
@@ -431,6 +469,24 @@
           cls += ' ' + signClass(v);
         }
         if (q && q.source_form === 'derived-Q4') cls += ' derived';
+        html += `<td class="${cls}">${text}</td>`;
+      }
+      // Latest column
+      {
+        let text = '—', cls = 'val';
+        if (latestVal != null) {
+          text = isPct ? fmtPctSigned(latestVal) : fmtM(latestVal);
+          cls += ' ' + signClass(latestVal) + ' summary';
+        }
+        html += `<td class="${cls}">${text}</td>`;
+      }
+      // TTM column
+      {
+        let text = '—', cls = 'val';
+        if (ttmAgg != null) {
+          text = isPct ? fmtPctSigned(ttmAgg) : fmtM(ttmAgg);
+          cls += ' ' + signClass(ttmAgg) + ' summary';
+        }
         html += `<td class="${cls}">${text}</td>`;
       }
       html += '</tr>';
