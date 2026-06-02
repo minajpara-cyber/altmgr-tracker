@@ -52,6 +52,12 @@
 
   <h2>Fund detail</h2>
   <div class="controls-row">
+    <label>Strategy:
+      <select id="strategy-filter"><option value="">All</option></select>
+    </label>
+    <label>Sponsor:
+      <select id="sponsor-filter"><option value="">All</option></select>
+    </label>
     <label>Fund:
       <select id="ticker"></select>
     </label>
@@ -135,19 +141,63 @@
   document.getElementById('stat-earliest').textContent = allDates[0] || '—';
   document.getElementById('stat-latest').textContent = allDates[allDates.length - 1] || '—';
 
-  // Fund dropdown — sort by row count descending so big-coverage funds are at the top
-  const tickerSel = document.getElementById('ticker');
+  // Fund dropdown — sorted by row count descending so big-coverage funds are
+  // at the top of whichever (filtered) list we end up showing.
+  const tickerSel  = document.getElementById('ticker');
+  const stratSel   = document.getElementById('strategy-filter');
+  const sponsorSel = document.getElementById('sponsor-filter');
   const sortedTickers = [...byTicker.keys()].sort((a, b) =>
     byTicker.get(b).length - byTicker.get(a).length || a.localeCompare(b));
+
+  // Populate the strategy + sponsor filters with values that actually have
+  // monthly data — no point offering "RE" if no REIT has monthly rows.
+  const strats   = new Set();
+  const sponsors = new Set();
   for (const t of sortedTickers) {
     const u = uByT.get(t) || {};
-    const o = document.createElement('option');
-    o.value = t;
-    o.textContent = `${t} — ${u.legal_name || t} (${byTicker.get(t).length} mo)`;
-    tickerSel.appendChild(o);
+    if (u.strategy) strats.add(u.strategy);
+    if (u.sponsor)  sponsors.add(u.sponsor);
   }
-  // Default to BCRED if present, else the largest-coverage fund
-  tickerSel.value = sortedTickers.includes('BCRED') ? 'BCRED' : sortedTickers[0];
+  for (const s of [...strats].sort()) {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s; stratSel.appendChild(o);
+  }
+  for (const s of [...sponsors].sort()) {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s; sponsorSel.appendChild(o);
+  }
+
+  function populateFundDropdown() {
+    const wantStrat   = stratSel.value;
+    const wantSponsor = sponsorSel.value;
+    const filtered = sortedTickers.filter(t => {
+      const u = uByT.get(t) || {};
+      if (wantStrat   && u.strategy !== wantStrat)   return false;
+      if (wantSponsor && u.sponsor  !== wantSponsor) return false;
+      return true;
+    });
+    // Remember the prior selection if it survives the filter.
+    const prior = tickerSel.value;
+    tickerSel.innerHTML = '';
+    if (filtered.length === 0) {
+      const o = document.createElement('option');
+      o.value = ''; o.textContent = '(no funds match)';
+      tickerSel.appendChild(o);
+      tickerSel.disabled = true;
+      return;
+    }
+    tickerSel.disabled = false;
+    for (const t of filtered) {
+      const u = uByT.get(t) || {};
+      const o = document.createElement('option');
+      o.value = t;
+      o.textContent = `${t} — ${u.legal_name || t} (${byTicker.get(t).length} mo)`;
+      tickerSel.appendChild(o);
+    }
+    tickerSel.value = filtered.includes(prior) ? prior
+                    : (filtered.includes('BCRED') ? 'BCRED' : filtered[0]);
+  }
+  populateFundDropdown();
 
   let chart = null;
 
@@ -327,6 +377,15 @@
 
   tickerSel.addEventListener('change', () => { renderChart(); renderTable(); });
   document.getElementById('metric').addEventListener('change', renderChart);
+  // Filter changes re-narrow the fund dropdown; if the active fund survives
+  // the new filter we keep it, otherwise we pick the largest match.
+  function onFilterChange() {
+    const before = tickerSel.value;
+    populateFundDropdown();
+    if (tickerSel.value !== before) { renderChart(); renderTable(); }
+  }
+  stratSel.addEventListener('change', onFilterChange);
+  sponsorSel.addEventListener('change', onFilterChange);
 
   renderChart();
   renderTable();
