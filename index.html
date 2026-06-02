@@ -12,6 +12,7 @@
   <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
   <nav>
     <a href="./index.html" class="active">Universe</a>
+    <a href="./manager.html">Manager</a>
     <a href="./fund.html">Fund</a>
     <a href="./compare.html">Compare</a>
     <a href="./filings.html">Filings</a>
@@ -65,7 +66,12 @@
     // since those vehicles mark-to-market under their accounting regimes.
     const fundNav = latest ? latest.fund_nav_usd : null;
     const dstNav = latest ? latest.dst_nav_usd : null;
-    const navEop = (fundNav != null ? fundNav : (latest ? latest.nav_eop : null));
+    // Fall back to balance-sheet net assets when the change-statement nav_eop
+    // is missing (e.g. brand-new multi-tier LP perpetuals whose Statement of
+    // Changes layout isn't picked up by the aggregator heuristic yet).
+    const navEop = (fundNav != null
+        ? fundNav
+        : (latest ? (latest.nav_eop ?? latest.total_net_assets_or_equity) : null));
     const navTotal = navEop != null ? navEop + (dstNav || 0) : null;
     if (navTotal != null) { totalNav += navTotal; totalNavCount++; }
     const iss = latest ? latest.issuance_total : null;

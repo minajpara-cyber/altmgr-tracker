@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manager — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css">
+<style>
+  .strat-badges { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .strat-badge {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5;
+  }
+  .strat-Credit { background: #1f5fa6; }
+  .strat-RE     { background: #c47a00; }
+  .strat-PE     { background: #2c9f3a; }
+  .strat-Infra  { background: #7b3f99; }
+  .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
+  .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./manager.html" class="active">Manager</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html">Compare</a>
+    <a href="./filings.html">Filings</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>By manager</h1>
+  <div class="stat-row" id="stat-row">
+    <div class="stat-card"><div class="label">Managers tracked</div><div class="value" id="stat-mgrs">…</div></div>
+    <div class="stat-card"><div class="label">Largest manager</div><div class="value" id="stat-largest">…</div><div class="sub" id="stat-largest-sub"></div></div>
+    <div class="stat-card"><div class="label">Total non-traded AUM</div><div class="value" id="stat-total">…</div><div class="sub" id="stat-total-sub"></div></div>
+    <div class="stat-card"><div class="label">Data through</div><div class="value" id="stat-refresh">…</div></div>
+  </div>
+
+  <h2>Managers</h2>
+  <div class="table-toolbar">
+    <input type="text" id="search" placeholder="filter by manager or strategy…">
+  </div>
+  <div id="manager-table"></div>
+
+  <h2 style="margin-top:32px" id="chart-title">AUM by manager over time</h2>
+  <div class="chart-hint" id="chart-hint">Tip: click a manager row above to drill into that manager's funds. Click again to restore.</div>
+  <div class="unit-toggle" id="chart-toggle">
+    <label><input type="radio" name="chart" value="stacked" checked> Stacked area</label>
+    <label><input type="radio" name="chart" value="line"> Line</label>
+  </div>
+  <div class="chart-wrap"><canvas id="aumChart"></canvas></div>
+</main>
+
+<footer class="sitefoot">
+  Data extracted from SEC EDGAR 10-K / 10-Q / N-CSR filings. All dollar values in millions. Not investment advice.
+</footer>
+
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="./app.js"></script>
+<script>
+(async function(){
+  paintRefreshDate();
+  let data;
+  try { data = await loadData(); } catch { return; }
+
+  // -- "Effective" AUM for a fund-quarter row.
+  // For REITs we prefer the manager-published fair-value Fund NAV (mirrors
+  // the Universe page). For everything else, nav_eop already reflects fair
+  // value. Ares REITs also have a DST sleeve added on top.
+  function navOf(q) {
+    if (!q) return null;
+    // Prefer fair-value Fund NAV (REITs); else nav_eop (change-statement);
+    // else total_net_assets_or_equity (balance-sheet), which fills gaps for
+    // multi-tier LP perpetuals whose nav_eop the aggregator misses.
+    const main = (q.fund_nav_usd != null) ? q.fund_nav_usd
+               : (q.nav_eop != null)      ? q.nav_eop
+               : q.total_net_assets_or_equity;
+    if (main == null) return null;
+    return main + (q.dst_nav_usd || 0);
+  }
+
+  const universe = data.universe || [];
+  const quarters = data.quarters || [];
+  const summary = data.summary_by_ticker || {};
+
+  // ticker -> sponsor / strategy
+  const tToSponsor = new Map();
+  const tToStrat   = new Map();
+  for (const u of universe) {
+    tToSponsor.set(u.ticker, u.sponsor);
+    tToStrat.set(u.ticker, u.strategy);
+  }
+
+  // All quarter labels seen, sorted chronologically.
+  const allQ = [...new Set(quarters.map(q => q.quarter_label).filter(Boolean))]
+    .sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
+
+  // sponsor -> Map(quarter_label -> AUM summed across that sponsor's funds)
+  const aumByMgr = new Map();
+  // sponsor -> {ticker -> Map(quarter -> aum)}  (for drill-down per fund)
+  const aumByTicker = new Map();
+  for (const q of quarters) {
+    const sp = tToSponsor.get(q.ticker);
+    if (!sp) continue;
+    const aum = navOf(q);
+    if (aum == null) continue;
+    if (!aumByMgr.has(sp)) aumByMgr.set(sp, new Map());
+    const m = aumByMgr.get(sp);
+    m.set(q.quarter_label, (m.get(q.quarter_label) || 0) + aum);
+    if (!aumByTicker.has(sp)) aumByTicker.set(sp, new Map());
+    const tm = aumByTicker.get(sp);
+    if (!tm.has(q.ticker)) tm.set(q.ticker, new Map());
+    tm.get(q.ticker).set(q.quarter_label, aum);
+  }
+
+  // Sponsor -> Set(strategies), Set(tickers)
+  const stratsBy = new Map();
+  const fundsBy  = new Map();
+  for (const u of universe) {
+    if (!stratsBy.has(u.sponsor)) stratsBy.set(u.sponsor, new Set());
+    stratsBy.get(u.sponsor).add(u.strategy);
+    if (!fundsBy.has(u.sponsor)) fundsBy.set(u.sponsor, new Set());
+    fundsBy.get(u.sponsor).add(u.ticker);
+  }
+
+  // Per-ticker latest quarter row (chronologically), used for weights and YTD flows
+  const latestByTicker = new Map();
+  const sortedQByTicker = new Map();
+  for (const q of quarters) {
+    if (!sortedQByTicker.has(q.ticker)) sortedQByTicker.set(q.ticker, []);
+    sortedQByTicker.get(q.ticker).push(q);
+  }
+  for (const [t, arr] of sortedQByTicker) {
+    arr.sort((a,b) => quarterSortKey(a.quarter_label) - quarterSortKey(b.quarter_label));
+    latestByTicker.set(t, arr[arr.length - 1]);
+  }
+
+  // ---- Build manager rows ----
+  const sponsors = [...new Set(universe.map(u => u.sponsor))].filter(Boolean).sort();
+  const rows = [];
+  let grandAum = 0;
+  for (const sp of sponsors) {
+    const m = aumByMgr.get(sp) || new Map();
+    const qLabels = [...m.keys()].sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
+    const lastQ = qLabels[qLabels.length - 1];
+    const prevQ = qLabels.length >= 2 ? qLabels[qLabels.length - 2] : null;
+    const aum  = lastQ ? m.get(lastQ) : null;
+    const prev = prevQ ? m.get(prevQ) : null;
+    const qoq  = (aum != null && prev) ? (aum / prev - 1) : null;
+
+    // AUM-weighted returns (per-metric denominators so a missing fund metric
+    // doesn't drag the average down).
+    let qN=0,qD=0, yN=0,yD=0, tN=0,tD=0;
+    let netFlowYTD = 0;
+    const tickers = [...(fundsBy.get(sp) || [])];
+    const latestYear = lastQ ? parseInt(lastQ.split(' ').pop(), 10) : null;
+    for (const t of tickers) {
+      const latest = latestByTicker.get(t);
+      const w = latest ? navOf(latest) : 0;
+      if (!w) continue;
+      const s = summary[t] || {};
+      if (s.latest_return != null) { qN += s.latest_return * w; qD += w; }
+      if (s.ytd_return    != null) { yN += s.ytd_return    * w; yD += w; }
+      if (s.ttm_return    != null) { tN += s.ttm_return    * w; tD += w; }
+      // YTD net flow = Σ across this ticker's current-calendar-year quarters
+      // of (issuance + DRIP − |repurchases|). DST proceeds/redemptions are
+      // counted for REITs that report them.
+      if (latestYear) {
+        for (const q of (sortedQByTicker.get(t) || [])) {
+          const y = parseInt((q.quarter_label || '').split(' ').pop(), 10);
+          if (y !== latestYear) continue;
+          netFlowYTD += (q.issuance_total || 0)
+                       + (q.drip_total || 0)
+                       + (q.dst_proceeds_usd || 0)
+                       - Math.abs(q.repurchases_total || 0)
+                       - Math.abs(q.dst_redemptions_usd || 0);
+        }
+      }
+    }
+
+    if (aum) grandAum += aum;
+    rows.push({
+      sponsor: sp,
+      n_funds: tickers.length,
+      strategies: [...(stratsBy.get(sp) || [])].sort(),
+      latest_q: lastQ,
+      aum: aum,
+      qoq_pct: qoq,
+      q_return:  qD ? qN/qD : null,
+      ytd_return:yD ? yN/yD : null,
+      ttm_return:tD ? tN/tD : null,
+      net_flow_ytd: netFlowYTD,
+    });
+  }
+
+  // ---- Stat cards ----
+  rows.sort((a,b) => (b.aum || 0) - (a.aum || 0));
+  const top = rows[0];
+  document.getElementById('stat-mgrs').textContent     = String(rows.length);
+  document.getElementById('stat-largest').textContent  = top ? top.sponsor : '—';
+  document.getElementById('stat-largest-sub').textContent = top ? fmtM(top.aum) : '';
+  document.getElementById('stat-total').textContent    = fmtM(grandAum);
+  document.getElementById('stat-total-sub').textContent= `across ${universe.length} funds`;
+  document.getElementById('stat-refresh').textContent  = fmtDate(data.data_through);
+
+  // ---- Manager table ----
+  const moneyCell = (cell) => fmtM(cell.getValue());
+  const moneySignedCell = (cell) => {
+    const v = cell.getValue();
+    if (v == null) return '—';
+    const el = document.createElement('span');
+    el.textContent = fmtMSigned(v);
+    el.className = v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+    return el;
+  };
+  const pctSignedCell = (cell) => {
+    const v = cell.getValue();
+    if (v == null) return '—';
+    const el = document.createElement('span');
+    el.textContent = fmtPctSigned(v);
+    el.className = v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+    return el;
+  };
+  const stratsCell = (cell) => {
+    const arr = cell.getValue() || [];
+    return `<span class="strat-badges">${arr.map(s => `<span class="strat-badge strat-${s}">${s}</span>`).join('')}</span>`;
+  };
+
+  const table = new Tabulator('#manager-table', {
+    data: rows,
+    layout: 'fitColumns',
+    pagination: false,
+    height: '50vh',
+    selectable: 1,
+    initialSort: [{column: 'aum', dir: 'desc'}],
+    columns: [
+      {title: 'Manager', field: 'sponsor', width: 110, formatter: (c) =>
+        `<strong>${c.getValue()}</strong>`},
+      {title: 'Strategies', field: 'strategies', minWidth: 180, formatter: stratsCell,
+        headerSort: false},
+      {title: '# Funds', field: 'n_funds', width: 80, cssClass: 'num'},
+      {title: 'AUM ($M)', field: 'aum', width: 130, cssClass: 'num',
+        formatter: moneyCell, sorter: 'number',
+        headerTooltip: 'Sum of latest-quarter Fund NAV across this manager’s non-traded products. REITs use the manager-published fair-value Fund NAV.'},
+      {title: 'QoQ %', field: 'qoq_pct', width: 90, cssClass: 'num',
+        formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'Sponsor-level AUM quarter-over-quarter change'},
+      {title: 'Q Return', field: 'q_return', width: 95, cssClass: 'num',
+        formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'AUM-weighted latest-quarter total return across this manager’s funds'},
+      {title: 'YTD', field: 'ytd_return', width: 85, cssClass: 'num',
+        formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'AUM-weighted YTD return'},
+      {title: 'TTM', field: 'ttm_return', width: 85, cssClass: 'num',
+        formatter: pctSignedCell, sorter: 'number',
+        headerTooltip: 'AUM-weighted trailing-12-month return'},
+      {title: 'YTD net flow', field: 'net_flow_ytd', width: 130, cssClass: 'num',
+        formatter: moneySignedCell, sorter: 'number',
+        headerTooltip: 'YTD subscriptions (incl. DRIP + DST proceeds) minus repurchases (incl. DST redemptions), summed across this manager’s funds'},
+      {title: 'Latest Q', field: 'latest_q', width: 90, cssClass: 'num'},
+    ],
+  });
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    const q = (e.target.value || '').toLowerCase().trim();
+    table.setFilter((r) => {
+      if (!q) return true;
+      if ((r.sponsor || '').toLowerCase().includes(q)) return true;
+      if ((r.strategies || []).some(s => s.toLowerCase().includes(q))) return true;
+      return false;
+    });
+  });
+
+  // ---- Chart ----
+  let chartMode = 'stacked';
+  let selectedSponsor = null;
+  let chart = null;
+  const palette = colorPalette(Math.max(rows.length, 12));
+
+  function buildAllManagersDatasets() {
+    return rows.map((r, i) => {
+      const m = aumByMgr.get(r.sponsor) || new Map();
+      return {
+        label: r.sponsor,
+        data: allQ.map(q => (m.get(q) || 0) / 1e6),  // chart in $M
+        backgroundColor: palette[i] + 'cc',
+        borderColor: palette[i],
+        borderWidth: 1.4,
+        tension: 0.2,
+        fill: chartMode === 'stacked',
+        pointRadius: 0,
+      };
+    });
+  }
+
+  function buildSponsorDrillDatasets(sponsor) {
+    const tickerMap = aumByTicker.get(sponsor) || new Map();
+    const tickers = [...tickerMap.keys()].sort();
+    return tickers.map((t, i) => {
+      const m = tickerMap.get(t);
+      return {
+        label: t,
+        data: allQ.map(q => (m.get(q) || 0) / 1e6),
+        backgroundColor: palette[i % palette.length] + 'cc',
+        borderColor: palette[i % palette.length],
+        borderWidth: 1.4,
+        tension: 0.2,
+        fill: chartMode === 'stacked',
+        pointRadius: 0,
+      };
+    });
+  }
+
+  function renderChart() {
+    const ctx = document.getElementById('aumChart').getContext('2d');
+    const datasets = selectedSponsor
+      ? buildSponsorDrillDatasets(selectedSponsor)
+      : buildAllManagersDatasets();
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: allQ, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${fmtM(ctx.parsed.y * 1e6)}`,
+              footer: (items) => {
+                const tot = items.reduce((s, it) => s + (it.parsed.y || 0), 0);
+                return chartMode === 'stacked' ? `Total: ${fmtM(tot * 1e6)}` : '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { autoSkip: true, maxRotation: 0, font: { size: 10 } } },
+          y: {
+            stacked: chartMode === 'stacked',
+            ticks: { callback: (v) => '$' + v.toLocaleString('en-US') + 'M', font: { size: 10 } },
+            title: { display: true, text: 'AUM ($M)' }
+          }
+        }
+      }
+    });
+    const title = document.getElementById('chart-title');
+    title.textContent = selectedSponsor
+      ? `Funds within ${selectedSponsor}`
+      : 'AUM by manager over time';
+  }
+
+  document.querySelectorAll('input[name="chart"]').forEach(r =>
+    r.addEventListener('change', (e) => { chartMode = e.target.value; renderChart(); })
+  );
+
+  // Click a manager row → drill into its funds; click same row again → reset.
+  table.on('rowClick', (e, row) => {
+    const sp = row.getData().sponsor;
+    selectedSponsor = (selectedSponsor === sp) ? null : sp;
+    document.querySelectorAll('.tabulator-row').forEach(el => el.classList.remove('selected'));
+    if (selectedSponsor) row.getElement().classList.add('selected');
+    renderChart();
+  });
+
+  renderChart();
+})();
+</script>
+</body>
+</html>
