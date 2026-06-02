@@ -2,20 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Manager — Alt-Manager Tracker</title>
+<title>Strategy — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
 <link rel="stylesheet" href="./style.css">
 <style>
-  .strat-badges { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-  .strat-badge {
+  .badge-row { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .pill {
     display: inline-block; padding: 1px 7px; border-radius: 10px;
     font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5;
   }
-  .strat-Credit { background: #1f5fa6; }
-  .strat-RE     { background: #c47a00; }
-  .strat-PE     { background: #2c9f3a; }
-  .strat-Infra  { background: #7b3f99; }
+  .pill.strat-Credit { background: #1f5fa6; }
+  .pill.strat-RE     { background: #c47a00; }
+  .pill.strat-PE     { background: #2c9f3a; }
+  .pill.strat-Infra  { background: #7b3f99; }
+  .pill.mgr          { background: #4b5563; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
   .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
   .chart-controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }
@@ -28,8 +29,8 @@
   <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
   <nav>
     <a href="./index.html">Universe</a>
-    <a href="./manager.html" class="active">Manager</a>
-    <a href="./strategy.html">Strategy</a>
+    <a href="./manager.html">Manager</a>
+    <a href="./strategy.html" class="active">Strategy</a>
     <a href="./fund.html">Fund</a>
     <a href="./compare.html">Compare</a>
     <a href="./filings.html">Filings</a>
@@ -38,22 +39,22 @@
 </header>
 
 <main>
-  <h1>By manager</h1>
+  <h1>By strategy</h1>
   <div class="stat-row" id="stat-row">
-    <div class="stat-card"><div class="label">Managers tracked</div><div class="value" id="stat-mgrs">…</div></div>
-    <div class="stat-card"><div class="label">Largest manager</div><div class="value" id="stat-largest">…</div><div class="sub" id="stat-largest-sub"></div></div>
+    <div class="stat-card"><div class="label">Strategies tracked</div><div class="value" id="stat-strats">…</div></div>
+    <div class="stat-card"><div class="label">Largest strategy</div><div class="value" id="stat-largest">…</div><div class="sub" id="stat-largest-sub"></div></div>
     <div class="stat-card"><div class="label">Total non-traded AUM</div><div class="value" id="stat-total">…</div><div class="sub" id="stat-total-sub"></div></div>
     <div class="stat-card"><div class="label">Data through</div><div class="value" id="stat-refresh">…</div></div>
   </div>
 
-  <h2>Managers</h2>
+  <h2>Strategies</h2>
   <div class="table-toolbar">
-    <input type="text" id="search" placeholder="filter by manager or strategy…">
+    <input type="text" id="search" placeholder="filter by strategy or manager…">
   </div>
-  <div id="manager-table"></div>
+  <div id="strategy-table"></div>
 
-  <h2 style="margin-top:32px" id="chart-title">AUM by manager over time</h2>
-  <div class="chart-hint" id="chart-hint">Tip: click a manager row above to drill into that manager's funds. Click again to restore.</div>
+  <h2 style="margin-top:32px" id="chart-title">AUM by strategy over time</h2>
+  <div class="chart-hint" id="chart-hint">Tip: click a strategy row above to drill into that strategy's funds. Click again to restore.</div>
   <div class="chart-controls">
     <label>Metric:
       <select id="metric">
@@ -105,15 +106,9 @@
   let data;
   try { data = await loadData(); } catch { return; }
 
-  // -- "Effective" AUM for a fund-quarter row.
-  // For REITs we prefer the manager-published fair-value Fund NAV (mirrors
-  // the Universe page). For everything else, nav_eop already reflects fair
-  // value. Ares REITs also have a DST sleeve added on top.
+  // Effective AUM for a fund-quarter (mirrors manager.html / index.html).
   function navOf(q) {
     if (!q) return null;
-    // Prefer fair-value Fund NAV (REITs); else nav_eop (change-statement);
-    // else total_net_assets_or_equity (balance-sheet), which fills gaps for
-    // multi-tier LP perpetuals whose nav_eop the aggregator misses.
     const main = (q.fund_nav_usd != null) ? q.fund_nav_usd
                : (q.nav_eop != null)      ? q.nav_eop
                : q.total_net_assets_or_equity;
@@ -125,7 +120,6 @@
   const quarters = data.quarters || [];
   const summary = data.summary_by_ticker || {};
 
-  // ticker -> sponsor / strategy
   const tToSponsor = new Map();
   const tToStrat   = new Map();
   for (const u of universe) {
@@ -133,39 +127,31 @@
     tToStrat.set(u.ticker, u.strategy);
   }
 
-  // All quarter labels seen, sorted chronologically.
   const allQ = [...new Set(quarters.map(q => q.quarter_label).filter(Boolean))]
     .sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
 
-  // sponsor -> Map(quarter_label -> AUM summed across that sponsor's funds)
-  const aumByMgr = new Map();
-  // sponsor -> {ticker -> Map(quarter -> aum)}  (for drill-down per fund)
-  const aumByTicker = new Map();
+  // strategy -> Map(quarter_label -> total AUM across that strategy's funds)
+  const aumByStrat = new Map();
   for (const q of quarters) {
-    const sp = tToSponsor.get(q.ticker);
-    if (!sp) continue;
+    const s = tToStrat.get(q.ticker);
+    if (!s) continue;
     const aum = navOf(q);
     if (aum == null) continue;
-    if (!aumByMgr.has(sp)) aumByMgr.set(sp, new Map());
-    const m = aumByMgr.get(sp);
+    if (!aumByStrat.has(s)) aumByStrat.set(s, new Map());
+    const m = aumByStrat.get(s);
     m.set(q.quarter_label, (m.get(q.quarter_label) || 0) + aum);
-    if (!aumByTicker.has(sp)) aumByTicker.set(sp, new Map());
-    const tm = aumByTicker.get(sp);
-    if (!tm.has(q.ticker)) tm.set(q.ticker, new Map());
-    tm.get(q.ticker).set(q.quarter_label, aum);
   }
 
-  // Sponsor -> Set(strategies), Set(tickers)
-  const stratsBy = new Map();
-  const fundsBy  = new Map();
+  // strategy -> Set(sponsors offering it), Set(tickers in it)
+  const mgrsByStrat  = new Map();
+  const fundsByStrat = new Map();
   for (const u of universe) {
-    if (!stratsBy.has(u.sponsor)) stratsBy.set(u.sponsor, new Set());
-    stratsBy.get(u.sponsor).add(u.strategy);
-    if (!fundsBy.has(u.sponsor)) fundsBy.set(u.sponsor, new Set());
-    fundsBy.get(u.sponsor).add(u.ticker);
+    if (!mgrsByStrat.has(u.strategy))  mgrsByStrat.set(u.strategy, new Set());
+    mgrsByStrat.get(u.strategy).add(u.sponsor);
+    if (!fundsByStrat.has(u.strategy)) fundsByStrat.set(u.strategy, new Set());
+    fundsByStrat.get(u.strategy).add(u.ticker);
   }
 
-  // Per-ticker latest quarter row (chronologically), used for weights and YTD flows
   const latestByTicker = new Map();
   const sortedQByTicker = new Map();
   for (const q of quarters) {
@@ -177,12 +163,12 @@
     latestByTicker.set(t, arr[arr.length - 1]);
   }
 
-  // ---- Build manager rows ----
-  const sponsors = [...new Set(universe.map(u => u.sponsor))].filter(Boolean).sort();
+  // ---- Build strategy rows ----
+  const strategies = [...new Set(universe.map(u => u.strategy))].filter(Boolean).sort();
   const rows = [];
   let grandAum = 0;
-  for (const sp of sponsors) {
-    const m = aumByMgr.get(sp) || new Map();
+  for (const st of strategies) {
+    const m = aumByStrat.get(st) || new Map();
     const qLabels = [...m.keys()].sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
     const lastQ = qLabels[qLabels.length - 1];
     const prevQ = qLabels.length >= 2 ? qLabels[qLabels.length - 2] : null;
@@ -190,11 +176,9 @@
     const prev = prevQ ? m.get(prevQ) : null;
     const qoq  = (aum != null && prev) ? (aum / prev - 1) : null;
 
-    // AUM-weighted returns (per-metric denominators so a missing fund metric
-    // doesn't drag the average down).
     let qN=0,qD=0, yN=0,yD=0, tN=0,tD=0;
     let netFlowYTD = 0;
-    const tickers = [...(fundsBy.get(sp) || [])];
+    const tickers = [...(fundsByStrat.get(st) || [])];
     const latestYear = lastQ ? parseInt(lastQ.split(' ').pop(), 10) : null;
     for (const t of tickers) {
       const latest = latestByTicker.get(t);
@@ -204,9 +188,6 @@
       if (s.latest_return != null) { qN += s.latest_return * w; qD += w; }
       if (s.ytd_return    != null) { yN += s.ytd_return    * w; yD += w; }
       if (s.ttm_return    != null) { tN += s.ttm_return    * w; tD += w; }
-      // YTD net flow = Σ across this ticker's current-calendar-year quarters
-      // of (issuance + DRIP − |repurchases|). DST proceeds/redemptions are
-      // counted for REITs that report them.
       if (latestYear) {
         for (const q of (sortedQByTicker.get(t) || [])) {
           const y = parseInt((q.quarter_label || '').split(' ').pop(), 10);
@@ -222,9 +203,9 @@
 
     if (aum) grandAum += aum;
     rows.push({
-      sponsor: sp,
+      strategy: st,
+      managers: [...(mgrsByStrat.get(st) || [])].sort(),
       n_funds: tickers.length,
-      strategies: [...(stratsBy.get(sp) || [])].sort(),
       latest_q: lastQ,
       aum: aum,
       qoq_pct: qoq,
@@ -238,14 +219,14 @@
   // ---- Stat cards ----
   rows.sort((a,b) => (b.aum || 0) - (a.aum || 0));
   const top = rows[0];
-  document.getElementById('stat-mgrs').textContent     = String(rows.length);
-  document.getElementById('stat-largest').textContent  = top ? top.sponsor : '—';
+  document.getElementById('stat-strats').textContent    = String(rows.length);
+  document.getElementById('stat-largest').textContent   = top ? top.strategy : '—';
   document.getElementById('stat-largest-sub').textContent = top ? fmtM(top.aum) : '';
-  document.getElementById('stat-total').textContent    = fmtM(grandAum);
-  document.getElementById('stat-total-sub').textContent= `across ${universe.length} funds`;
-  document.getElementById('stat-refresh').textContent  = fmtDate(data.data_through);
+  document.getElementById('stat-total').textContent     = fmtM(grandAum);
+  document.getElementById('stat-total-sub').textContent = `across ${universe.length} funds`;
+  document.getElementById('stat-refresh').textContent   = fmtDate(data.data_through);
 
-  // ---- Manager table ----
+  // ---- Strategy table ----
   const moneyCell = (cell) => fmtM(cell.getValue());
   const moneySignedCell = (cell) => {
     const v = cell.getValue();
@@ -263,33 +244,37 @@
     el.className = v > 0 ? 'pos' : v < 0 ? 'neg' : '';
     return el;
   };
-  const stratsCell = (cell) => {
+  const stratCell = (cell) => {
+    const s = cell.getValue();
+    return `<span class="pill strat-${s}">${s}</span>`;
+  };
+  const mgrsCell = (cell) => {
     const arr = cell.getValue() || [];
-    return `<span class="strat-badges">${arr.map(s => `<span class="strat-badge strat-${s}">${s}</span>`).join('')}</span>`;
+    return `<span class="badge-row">${arr.map(m => `<span class="pill mgr">${m}</span>`).join('')}</span>`;
   };
 
-  const table = new Tabulator('#manager-table', {
+  const table = new Tabulator('#strategy-table', {
     data: rows,
     layout: 'fitColumns',
     pagination: false,
-    height: '50vh',
+    height: '40vh',
     selectable: 1,
     initialSort: [{column: 'aum', dir: 'desc'}],
     columns: [
-      {title: 'Manager', field: 'sponsor', width: 110, formatter: (c) =>
-        `<strong>${c.getValue()}</strong>`},
-      {title: 'Strategies', field: 'strategies', minWidth: 180, formatter: stratsCell,
-        headerSort: false},
+      {title: 'Strategy', field: 'strategy', width: 110, formatter: stratCell},
+      {title: 'Managers', field: 'managers', minWidth: 220, formatter: mgrsCell,
+        headerSort: false,
+        headerTooltip: 'Sponsors offering at least one fund in this strategy'},
       {title: '# Funds', field: 'n_funds', width: 80, cssClass: 'num'},
       {title: 'AUM ($M)', field: 'aum', width: 130, cssClass: 'num',
         formatter: moneyCell, sorter: 'number',
-        headerTooltip: 'Sum of latest-quarter Fund NAV across this manager’s non-traded products. REITs use the manager-published fair-value Fund NAV.'},
+        headerTooltip: 'Sum of latest-quarter Fund NAV across all funds in this strategy. REITs use the manager-published fair-value Fund NAV.'},
       {title: 'QoQ %', field: 'qoq_pct', width: 90, cssClass: 'num',
         formatter: pctSignedCell, sorter: 'number',
-        headerTooltip: 'Sponsor-level AUM quarter-over-quarter change'},
+        headerTooltip: 'Strategy-level AUM quarter-over-quarter change'},
       {title: 'Q Return', field: 'q_return', width: 95, cssClass: 'num',
         formatter: pctSignedCell, sorter: 'number',
-        headerTooltip: 'AUM-weighted latest-quarter total return across this manager’s funds'},
+        headerTooltip: 'AUM-weighted latest-quarter total return across funds in this strategy'},
       {title: 'YTD', field: 'ytd_return', width: 85, cssClass: 'num',
         formatter: pctSignedCell, sorter: 'number',
         headerTooltip: 'AUM-weighted YTD return'},
@@ -298,7 +283,7 @@
         headerTooltip: 'AUM-weighted trailing-12-month return'},
       {title: 'YTD net flow', field: 'net_flow_ytd', width: 130, cssClass: 'num',
         formatter: moneySignedCell, sorter: 'number',
-        headerTooltip: 'YTD subscriptions (incl. DRIP + DST proceeds) minus repurchases (incl. DST redemptions), summed across this manager’s funds'},
+        headerTooltip: 'YTD subscriptions (incl. DRIP + DST proceeds) minus repurchases (incl. DST redemptions), summed across funds in this strategy'},
       {title: 'Latest Q', field: 'latest_q', width: 90, cssClass: 'num'},
     ],
   });
@@ -307,8 +292,8 @@
     const q = (e.target.value || '').toLowerCase().trim();
     table.setFilter((r) => {
       if (!q) return true;
-      if ((r.sponsor || '').toLowerCase().includes(q)) return true;
-      if ((r.strategies || []).some(s => s.toLowerCase().includes(q))) return true;
+      if ((r.strategy || '').toLowerCase().includes(q)) return true;
+      if ((r.managers || []).some(m => m.toLowerCase().includes(q))) return true;
       return false;
     });
   });
@@ -316,13 +301,10 @@
   // ---- Chart with metric selector ----
   let chartMode = 'stacked';
   let currentMetric = 'aum';
-  let selectedSponsor = null;
+  let selectedStrategy = null;
   let chart = null;
   const palette = colorPalette(Math.max(rows.length, 12));
 
-  // Metric registry. perQuarter returns a scalar for sum metrics, or
-  // {val, weight} for weighted metrics. Money metrics chart in $M; pct
-  // metrics chart in fractional units (Chart.js ticks render as %).
   const METRICS = {
     aum: {
       label: 'AUM (Fund NAV)', type: 'money', stackable: true, weighted: false,
@@ -371,8 +353,6 @@
       }},
   };
 
-  // Aggregate the active metric across quarters, grouped by some key.
-  // Returns Map<groupKey, Map<quarter_label, scalarValue>>.
   function aggregateBy(grouperFn, metricKey) {
     const m = METRICS[metricKey];
     const out = new Map();
@@ -404,13 +384,11 @@
 
   function buildDatasets() {
     const m = METRICS[currentMetric];
-    const grouper = selectedSponsor
-      ? (q) => (tToSponsor.get(q.ticker) === selectedSponsor) ? q.ticker : null
-      : (q) => tToSponsor.get(q.ticker);
+    const grouper = selectedStrategy
+      ? (q) => (tToStrat.get(q.ticker) === selectedStrategy) ? q.ticker : null
+      : (q) => tToStrat.get(q.ticker);
     const agg = aggregateBy(grouper, currentMetric);
     let keys = [...agg.keys()];
-    // For stacked money metrics, put largest at the bottom of the stack
-    // (largest sponsor visible first). For others, alphabetical.
     const stackedNow = m.stackable && chartMode === 'stacked';
     if (stackedNow) {
       const lastQ = allQ[allQ.length - 1];
@@ -424,7 +402,7 @@
       const data = allQ.map(q => {
         const v = inner.get(q);
         if (v == null) return null;
-        return m.type === 'pct' ? v : v / 1e6;  // money charted in $M
+        return m.type === 'pct' ? v : v / 1e6;
       });
       return {
         label: k,
@@ -486,10 +464,9 @@
         }
       }
     });
-    // Title + stack-toggle lock
-    document.getElementById('chart-title').textContent = selectedSponsor
-      ? `${m.label} — funds within ${selectedSponsor}`
-      : `${m.label} — by manager over time`;
+    document.getElementById('chart-title').textContent = selectedStrategy
+      ? `${m.label} — funds within ${selectedStrategy}`
+      : `${m.label} — by strategy over time`;
     const toggle = document.getElementById('chart-toggle');
     const lineRadio    = toggle.querySelector('input[value="line"]');
     const stackedRadio = toggle.querySelector('input[value="stacked"]');
@@ -500,20 +477,16 @@
       toggle.classList.add('locked');
       lineRadio.checked = true;
       stackedRadio.disabled = true;
-      // Don't actually clobber chartMode — keep user's preference for when
-      // they switch back to a stackable metric.
     }
     renderDataTable();
   }
 
-  // Numerical mirror of the chart: rows = series (sponsor, or funds when
-  // drilled in), columns = quarters, cells = the same value the chart plots.
   let dataTable = null;
   function renderDataTable() {
     const m = METRICS[currentMetric];
-    const grouper = selectedSponsor
-      ? (q) => (tToSponsor.get(q.ticker) === selectedSponsor) ? q.ticker : null
-      : (q) => tToSponsor.get(q.ticker);
+    const grouper = selectedStrategy
+      ? (q) => (tToStrat.get(q.ticker) === selectedStrategy) ? q.ticker : null
+      : (q) => tToStrat.get(q.ticker);
     const agg = aggregateBy(grouper, currentMetric);
     const lastQ = allQ[allQ.length - 1];
 
@@ -530,9 +503,8 @@
       return m.type === 'pct' ? fmtPctSigned(v) : fmtM(v);
     };
 
-    // Columns: frozen series label + one per quarter.
     const cols = [
-      {title: selectedSponsor ? 'Fund' : 'Manager', field: '_label',
+      {title: selectedStrategy ? 'Fund' : 'Strategy', field: '_label',
        width: 110, frozen: true,
        formatter: (c) => {
           const v = c.getValue();
@@ -545,7 +517,6 @@
                  headerSort: false, formatter: fmtCell});
     }
 
-    // Rows in chart-stack order (largest at top).
     const tableData = keys.map(k => {
       const row = { _label: k };
       const inner = agg.get(k);
@@ -553,7 +524,6 @@
       return row;
     });
 
-    // Total row for additive money metrics with >1 series.
     if (m.type !== 'pct' && tableData.length > 1) {
       const totals = { _label: 'Total' };
       for (const q of allQ) {
@@ -567,7 +537,7 @@
     }
 
     document.getElementById('data-table-title').textContent =
-      `Data table — ${m.label}` + (selectedSponsor ? ` (${selectedSponsor})` : '');
+      `Data table — ${m.label}` + (selectedStrategy ? ` (${selectedStrategy})` : '');
 
     if (dataTable) dataTable.destroy();
     dataTable = new Tabulator('#data-table', {
@@ -595,12 +565,11 @@
     renderChart();
   });
 
-  // Click a manager row → drill into its funds; click same row again → reset.
   table.on('rowClick', (e, row) => {
-    const sp = row.getData().sponsor;
-    selectedSponsor = (selectedSponsor === sp) ? null : sp;
+    const st = row.getData().strategy;
+    selectedStrategy = (selectedStrategy === st) ? null : st;
     document.querySelectorAll('.tabulator-row').forEach(el => el.classList.remove('selected'));
-    if (selectedSponsor) row.getElement().classList.add('selected');
+    if (selectedStrategy) row.getElement().classList.add('selected');
     renderChart();
   });
 
