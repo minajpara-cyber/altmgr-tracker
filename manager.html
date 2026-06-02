@@ -85,6 +85,10 @@
     </div>
   </div>
   <div class="chart-wrap"><canvas id="aumChart"></canvas></div>
+
+  <h2 style="margin-top:24px" id="data-table-title">Data table</h2>
+  <div class="chart-hint">Numerical view of the same series. Scroll horizontally to see older quarters.</div>
+  <div id="data-table"></div>
 </main>
 
 <footer class="sitefoot">
@@ -498,6 +502,88 @@
       // Don't actually clobber chartMode — keep user's preference for when
       // they switch back to a stackable metric.
     }
+    renderDataTable();
+  }
+
+  // Numerical mirror of the chart: rows = series (sponsor, or funds when
+  // drilled in), columns = quarters, cells = the same value the chart plots.
+  let dataTable = null;
+  function renderDataTable() {
+    const m = METRICS[currentMetric];
+    const grouper = selectedSponsor
+      ? (q) => (tToSponsor.get(q.ticker) === selectedSponsor) ? q.ticker : null
+      : (q) => tToSponsor.get(q.ticker);
+    const agg = aggregateBy(grouper, currentMetric);
+    const lastQ = allQ[allQ.length - 1];
+
+    let keys = [...agg.keys()];
+    if (m.stackable) {
+      keys.sort((a,b) => (agg.get(b).get(lastQ) || 0) - (agg.get(a).get(lastQ) || 0));
+    } else {
+      keys.sort();
+    }
+
+    const fmtCell = (cell) => {
+      const v = cell.getValue();
+      if (v == null) return '<span class="muted">—</span>';
+      return m.type === 'pct' ? fmtPctSigned(v) : fmtM(v);
+    };
+
+    // Columns: frozen series label + one per quarter.
+    const cols = [
+      {title: selectedSponsor ? 'Fund' : 'Manager', field: '_label',
+       width: 110, frozen: true,
+       formatter: (c) => {
+          const v = c.getValue();
+          if (v === 'Total') return '<strong>Total</strong>';
+          return `<strong>${v}</strong>`;
+       }},
+    ];
+    for (const q of allQ) {
+      cols.push({title: q, field: q, width: 92, cssClass: 'num',
+                 headerSort: false, formatter: fmtCell});
+    }
+
+    // Rows in chart-stack order (largest at top).
+    const tableData = keys.map(k => {
+      const row = { _label: k };
+      const inner = agg.get(k);
+      for (const q of allQ) row[q] = inner.get(q) ?? null;
+      return row;
+    });
+
+    // Total row for additive money metrics with >1 series.
+    if (m.type !== 'pct' && tableData.length > 1) {
+      const totals = { _label: 'Total' };
+      for (const q of allQ) {
+        let sum = 0, any = false;
+        for (const r of tableData) {
+          if (r[q] != null) { sum += r[q]; any = true; }
+        }
+        totals[q] = any ? sum : null;
+      }
+      tableData.push(totals);
+    }
+
+    document.getElementById('data-table-title').textContent =
+      `Data table — ${m.label}` + (selectedSponsor ? ` (${selectedSponsor})` : '');
+
+    if (dataTable) dataTable.destroy();
+    dataTable = new Tabulator('#data-table', {
+      data: tableData,
+      columns: cols,
+      layout: 'fitDataFill',
+      height: '42vh',
+      pagination: false,
+      rowFormatter: (row) => {
+        if (row.getData()._label === 'Total') {
+          const el = row.getElement();
+          el.style.fontWeight = '600';
+          el.style.borderTop = '1px solid #c0c0c0';
+          el.style.background = 'rgba(0,0,0,0.04)';
+        }
+      },
+    });
   }
 
   document.querySelectorAll('input[name="chart"]').forEach(r =>
