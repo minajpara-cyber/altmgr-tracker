@@ -18,6 +18,9 @@
   .strat-Infra  { background: #7b3f99; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
   .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
+  .chart-controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }
+  .chart-controls label { font-size: 13px; }
+  .chart-controls select { padding: 4px 8px; font-size: 13px; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -50,9 +53,36 @@
 
   <h2 style="margin-top:32px" id="chart-title">AUM by manager over time</h2>
   <div class="chart-hint" id="chart-hint">Tip: click a manager row above to drill into that manager's funds. Click again to restore.</div>
-  <div class="unit-toggle" id="chart-toggle">
-    <label><input type="radio" name="chart" value="stacked" checked> Stacked area</label>
-    <label><input type="radio" name="chart" value="line"> Line</label>
+  <div class="chart-controls">
+    <label>Metric:
+      <select id="metric">
+        <optgroup label="Stocks">
+          <option value="aum" selected>AUM (Fund NAV)</option>
+        </optgroup>
+        <optgroup label="Flows ($)">
+          <option value="total_subscriptions">Total subscriptions (cash + DRIP + DST)</option>
+          <option value="issuance_total">Cash subscriptions</option>
+          <option value="drip_total">DRIP</option>
+          <option value="repurchases_total">Repurchases</option>
+          <option value="distributions_total">Distributions paid</option>
+          <option value="net_capital_activity">Net capital activity (subs − redemptions)</option>
+        </optgroup>
+        <optgroup label="Income / expense ($)">
+          <option value="management_fees">Management fees</option>
+          <option value="total_expenses_gross">Total expenses (gross)</option>
+          <option value="total_investment_income_or_revenues">Investment income / revenues</option>
+          <option value="net_inc_from_ops">Net income from operations</option>
+        </optgroup>
+        <optgroup label="Returns (%)">
+          <option value="unified_return_pct">Total return % (AUM-weighted)</option>
+          <option value="nav_change_pct">NAV change % (AUM-weighted)</option>
+        </optgroup>
+      </select>
+    </label>
+    <div class="unit-toggle" id="chart-toggle">
+      <label><input type="radio" name="chart" value="stacked" checked> Stacked area</label>
+      <label><input type="radio" name="chart" value="line"> Line</label>
+    </div>
   </div>
   <div class="chart-wrap"><canvas id="aumChart"></canvas></div>
 </main>
@@ -278,51 +308,138 @@
     });
   });
 
-  // ---- Chart ----
+  // ---- Chart with metric selector ----
   let chartMode = 'stacked';
+  let currentMetric = 'aum';
   let selectedSponsor = null;
   let chart = null;
   const palette = colorPalette(Math.max(rows.length, 12));
 
-  function buildAllManagersDatasets() {
-    return rows.map((r, i) => {
-      const m = aumByMgr.get(r.sponsor) || new Map();
-      return {
-        label: r.sponsor,
-        data: allQ.map(q => (m.get(q) || 0) / 1e6),  // chart in $M
-        backgroundColor: palette[i] + 'cc',
-        borderColor: palette[i],
-        borderWidth: 1.4,
-        tension: 0.2,
-        fill: chartMode === 'stacked',
-        pointRadius: 0,
-      };
-    });
+  // Metric registry. perQuarter returns a scalar for sum metrics, or
+  // {val, weight} for weighted metrics. Money metrics chart in $M; pct
+  // metrics chart in fractional units (Chart.js ticks render as %).
+  const METRICS = {
+    aum: {
+      label: 'AUM (Fund NAV)', type: 'money', stackable: true, weighted: false,
+      perQuarter: (q) => navOf(q),
+    },
+    total_subscriptions: {
+      label: 'Total subscriptions', type: 'money', stackable: true, weighted: false,
+      perQuarter: (q) => {
+        const v = (q.issuance_total || 0) + (q.drip_total || 0) + (q.dst_proceeds_usd || 0);
+        return v || null;
+      },
+    },
+    issuance_total:    {label: 'Cash subscriptions',    type: 'money', stackable: true,  weighted: false, perQuarter: (q) => q.issuance_total},
+    drip_total:        {label: 'DRIP',                  type: 'money', stackable: true,  weighted: false, perQuarter: (q) => q.drip_total},
+    repurchases_total: {label: 'Repurchases',           type: 'money', stackable: true,  weighted: false,
+      perQuarter: (q) => q.repurchases_total != null ? Math.abs(q.repurchases_total) : null},
+    distributions_total: {label: 'Distributions paid',  type: 'money', stackable: true,  weighted: false,
+      perQuarter: (q) => q.distributions_total != null ? Math.abs(q.distributions_total) : null},
+    net_capital_activity: {label: 'Net capital activity', type: 'money', stackable: false, weighted: false,
+      perQuarter: (q) => {
+        const iss = q.issuance_total, drip = q.drip_total, dst = q.dst_proceeds_usd;
+        const rep = q.repurchases_total, dstOut = q.dst_redemptions_usd;
+        if (iss == null && drip == null && dst == null && rep == null && dstOut == null) return null;
+        return (iss || 0) + (drip || 0) + (dst || 0)
+             - Math.abs(rep || 0) - Math.abs(dstOut || 0);
+      }},
+    management_fees: {label: 'Management fees',         type: 'money', stackable: true,  weighted: false,
+      perQuarter: (q) => q.management_fees != null ? Math.abs(q.management_fees) : null},
+    total_expenses_gross: {label: 'Total expenses (gross)', type: 'money', stackable: true, weighted: false,
+      perQuarter: (q) => q.total_expenses_gross != null ? Math.abs(q.total_expenses_gross) : null},
+    total_investment_income_or_revenues: {label: 'Investment income / revenues', type: 'money', stackable: true, weighted: false,
+      perQuarter: (q) => q.total_investment_income_or_revenues},
+    net_inc_from_ops:  {label: 'Net income from operations', type: 'money', stackable: false, weighted: false,
+      perQuarter: (q) => q.net_inc_from_ops},
+    unified_return_pct: {label: 'Total return % (AUM-weighted)', type: 'pct', stackable: false, weighted: true,
+      perQuarter: (q) => {
+        const w = q.nav_bop || navOf(q);
+        if (q.unified_return_pct == null || !w) return null;
+        return { val: q.unified_return_pct, weight: w };
+      }},
+    nav_change_pct: {label: 'NAV change % (AUM-weighted)', type: 'pct', stackable: false, weighted: true,
+      perQuarter: (q) => {
+        const w = q.nav_bop || navOf(q);
+        if (q.nav_change_pct == null || !w) return null;
+        return { val: q.nav_change_pct, weight: w };
+      }},
+  };
+
+  // Aggregate the active metric across quarters, grouped by some key.
+  // Returns Map<groupKey, Map<quarter_label, scalarValue>>.
+  function aggregateBy(grouperFn, metricKey) {
+    const m = METRICS[metricKey];
+    const out = new Map();
+    for (const q of quarters) {
+      const key = grouperFn(q);
+      if (!key) continue;
+      const raw = m.perQuarter(q);
+      if (raw == null) continue;
+      if (!out.has(key)) out.set(key, new Map());
+      const inner = out.get(key);
+      if (m.weighted) {
+        const { val, weight } = raw;
+        const cur = inner.get(q.quarter_label) || { num: 0, den: 0 };
+        cur.num += val * weight; cur.den += weight;
+        inner.set(q.quarter_label, cur);
+      } else {
+        inner.set(q.quarter_label, (inner.get(q.quarter_label) || 0) + raw);
+      }
+    }
+    if (m.weighted) {
+      for (const inner of out.values()) {
+        for (const [k, agg] of inner) {
+          inner.set(k, agg.den ? agg.num / agg.den : null);
+        }
+      }
+    }
+    return out;
   }
 
-  function buildSponsorDrillDatasets(sponsor) {
-    const tickerMap = aumByTicker.get(sponsor) || new Map();
-    const tickers = [...tickerMap.keys()].sort();
-    return tickers.map((t, i) => {
-      const m = tickerMap.get(t);
+  function buildDatasets() {
+    const m = METRICS[currentMetric];
+    const grouper = selectedSponsor
+      ? (q) => (tToSponsor.get(q.ticker) === selectedSponsor) ? q.ticker : null
+      : (q) => tToSponsor.get(q.ticker);
+    const agg = aggregateBy(grouper, currentMetric);
+    let keys = [...agg.keys()];
+    // For stacked money metrics, put largest at the bottom of the stack
+    // (largest sponsor visible first). For others, alphabetical.
+    const stackedNow = m.stackable && chartMode === 'stacked';
+    if (stackedNow) {
+      const lastQ = allQ[allQ.length - 1];
+      keys.sort((a, b) =>
+        (agg.get(b).get(lastQ) || 0) - (agg.get(a).get(lastQ) || 0));
+    } else {
+      keys.sort();
+    }
+    return keys.map((k, i) => {
+      const inner = agg.get(k);
+      const data = allQ.map(q => {
+        const v = inner.get(q);
+        if (v == null) return null;
+        return m.type === 'pct' ? v : v / 1e6;  // money charted in $M
+      });
       return {
-        label: t,
-        data: allQ.map(q => (m.get(q) || 0) / 1e6),
+        label: k,
+        data,
         backgroundColor: palette[i % palette.length] + 'cc',
         borderColor: palette[i % palette.length],
         borderWidth: 1.4,
         tension: 0.2,
-        fill: chartMode === 'stacked',
+        fill: stackedNow,
         pointRadius: 0,
+        spanGaps: m.type === 'pct',
       };
     });
   }
 
   function renderChart() {
+    const m = METRICS[currentMetric];
+    const isStacked = m.stackable && chartMode === 'stacked';
     const ctx = document.getElementById('aumChart').getContext('2d');
-    const datasets = selectedSponsor
-      ? buildSponsorDrillDatasets(selectedSponsor)
-      : buildAllManagersDatasets();
+    const datasets = buildDatasets();
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: 'line',
@@ -335,10 +452,16 @@
           legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${fmtM(ctx.parsed.y * 1e6)}`,
+              label: (ctx) => {
+                const raw = ctx.parsed.y;
+                if (raw == null) return null;
+                if (m.type === 'pct') return `${ctx.dataset.label}: ${fmtPctSigned(raw)}`;
+                return `${ctx.dataset.label}: ${fmtM(raw * 1e6)}`;
+              },
               footer: (items) => {
+                if (!isStacked || m.type === 'pct') return '';
                 const tot = items.reduce((s, it) => s + (it.parsed.y || 0), 0);
-                return chartMode === 'stacked' ? `Total: ${fmtM(tot * 1e6)}` : '';
+                return `Total: ${fmtM(tot * 1e6)}`;
               }
             }
           }
@@ -346,22 +469,44 @@
         scales: {
           x: { ticks: { autoSkip: true, maxRotation: 0, font: { size: 10 } } },
           y: {
-            stacked: chartMode === 'stacked',
-            ticks: { callback: (v) => '$' + v.toLocaleString('en-US') + 'M', font: { size: 10 } },
-            title: { display: true, text: 'AUM ($M)' }
+            stacked: isStacked,
+            ticks: {
+              callback: (v) => m.type === 'pct'
+                ? (v * 100).toFixed(1) + '%'
+                : '$' + v.toLocaleString('en-US') + 'M',
+              font: { size: 10 }
+            },
+            title: { display: true, text: m.label }
           }
         }
       }
     });
-    const title = document.getElementById('chart-title');
-    title.textContent = selectedSponsor
-      ? `Funds within ${selectedSponsor}`
-      : 'AUM by manager over time';
+    // Title + stack-toggle lock
+    document.getElementById('chart-title').textContent = selectedSponsor
+      ? `${m.label} — funds within ${selectedSponsor}`
+      : `${m.label} — by manager over time`;
+    const toggle = document.getElementById('chart-toggle');
+    const lineRadio    = toggle.querySelector('input[value="line"]');
+    const stackedRadio = toggle.querySelector('input[value="stacked"]');
+    if (m.stackable) {
+      toggle.classList.remove('locked');
+      lineRadio.disabled = stackedRadio.disabled = false;
+    } else {
+      toggle.classList.add('locked');
+      lineRadio.checked = true;
+      stackedRadio.disabled = true;
+      // Don't actually clobber chartMode — keep user's preference for when
+      // they switch back to a stackable metric.
+    }
   }
 
   document.querySelectorAll('input[name="chart"]').forEach(r =>
     r.addEventListener('change', (e) => { chartMode = e.target.value; renderChart(); })
   );
+  document.getElementById('metric').addEventListener('change', (e) => {
+    currentMetric = e.target.value;
+    renderChart();
+  });
 
   // Click a manager row → drill into its funds; click same row again → reset.
   table.on('rowClick', (e, row) => {
