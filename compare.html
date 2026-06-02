@@ -469,7 +469,7 @@
           text = isPct ? fmtPctSigned(v) : fmtM(v);
           cls += ' ' + signClass(v);
         }
-        if (q && q.source_form === 'derived-Q4') cls += ' derived';
+        if (q && (q.source_form || '').startsWith('derived-')) cls += ' derived';
         html += `<td class="${cls}">${text}</td>`;
       }
       // Latest column
