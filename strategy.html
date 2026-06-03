@@ -123,9 +123,11 @@
 
   const tToSponsor = new Map();
   const tToStrat   = new Map();
+  const tToName    = new Map();
   for (const u of universe) {
     tToSponsor.set(u.ticker, u.sponsor);
     tToStrat.set(u.ticker, u.strategy);
+    tToName.set(u.ticker, u.legal_name || u.ticker);
   }
 
   const allQ = [...new Set(quarters.map(q => q.quarter_label).filter(Boolean))]
@@ -506,10 +508,16 @@
 
     const cols = [
       {title: selectedStrategy ? 'Fund' : 'Strategy', field: '_label',
-       width: 110, frozen: true,
+       width: selectedStrategy ? 280 : 110, frozen: true,
        formatter: (c) => {
           const v = c.getValue();
           if (v === 'Total') return '<strong>Total</strong>';
+          if (selectedStrategy) {
+            const name = tToName.get(v);
+            if (name && name !== v) {
+              return `<strong>${v}</strong> <span class="muted" style="font-weight:400;font-size:11px">${name}</span>`;
+            }
+          }
           return `<strong>${v}</strong>`;
        }},
     ];

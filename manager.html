@@ -126,12 +126,14 @@
   const quarters = data.quarters || [];
   const summary = data.summary_by_ticker || {};
 
-  // ticker -> sponsor / strategy
+  // ticker -> sponsor / strategy / legal name
   const tToSponsor = new Map();
   const tToStrat   = new Map();
+  const tToName    = new Map();
   for (const u of universe) {
     tToSponsor.set(u.ticker, u.sponsor);
     tToStrat.set(u.ticker, u.strategy);
+    tToName.set(u.ticker, u.legal_name || u.ticker);
   }
 
   // All quarter labels seen, sorted chronologically.
@@ -531,13 +533,23 @@
       return m.type === 'pct' ? fmtPctSigned(v) : fmtM(v);
     };
 
-    // Columns: frozen series label + one per quarter.
+    // Columns: frozen series label + one per quarter. In manager-summary
+    // mode the label is the sponsor code (short — 110px). In drill-in mode
+    // the label is the ticker, and we append the fund's legal name so the
+    // user doesn't have to remember what e.g. "ASIF" stands for. Wider
+    // frozen column to fit the long names.
     const cols = [
       {title: selectedSponsor ? 'Fund' : 'Manager', field: '_label',
-       width: 110, frozen: true,
+       width: selectedSponsor ? 280 : 110, frozen: true,
        formatter: (c) => {
           const v = c.getValue();
           if (v === 'Total') return '<strong>Total</strong>';
+          if (selectedSponsor) {
+            const name = tToName.get(v);
+            if (name && name !== v) {
+              return `<strong>${v}</strong> <span class="muted" style="font-weight:400;font-size:11px">${name}</span>`;
+            }
+          }
           return `<strong>${v}</strong>`;
        }},
     ];
