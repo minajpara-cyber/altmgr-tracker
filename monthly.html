@@ -63,16 +63,23 @@
     </label>
     <label>Metric:
       <select id="metric">
+        <optgroup label="Flows ($)">
+          <option value="subs_best" selected>Subscriptions (best available)</option>
+          <option value="cash_subscriptions">Cash subscriptions (NPORT)</option>
+          <option value="unreg_sales_usd">Subscriptions — unregistered 8-K sales</option>
+          <option value="drip">DRIP</option>
+          <option value="redemptions">Redemptions</option>
+          <option value="net_flow">Net flow (subs + DRIP − redemptions)</option>
+        </optgroup>
         <optgroup label="NAV ($)">
-          <option value="nav_per_share_class_i" selected>NAV per share — Class I</option>
+          <option value="nav_per_share_class_i">NAV per share — Class I</option>
           <option value="nav_per_share_class_s">NAV per share — Class S</option>
           <option value="nav_per_share_class_d">NAV per share — Class D</option>
           <option value="aggregate_nav_usd">Aggregate NAV ($)</option>
           <option value="portfolio_fair_value_usd">Portfolio fair value ($)</option>
         </optgroup>
-        <optgroup label="Leverage / debt">
-          <option value="total_debt_usd">Total debt ($)</option>
-          <option value="leverage_ratio">Leverage ratio (debt / equity)</option>
+        <optgroup label="Returns (%)">
+          <option value="monthly_return_pct">Monthly return %</option>
         </optgroup>
         <optgroup label="Distributions ($/share)">
           <option value="dist_net_class_i">Distribution net — Class I</option>
@@ -80,14 +87,9 @@
           <option value="dist_net_class_d">Distribution net — Class D</option>
           <option value="dist_gross_class_i">Distribution gross — Class I</option>
         </optgroup>
-        <optgroup label="Flows ($)">
-          <option value="cash_subscriptions">Cash subscriptions</option>
-          <option value="drip">DRIP</option>
-          <option value="redemptions">Redemptions</option>
-          <option value="net_flow">Net flow (subs + DRIP − redemptions)</option>
-        </optgroup>
-        <optgroup label="Returns (%)">
-          <option value="monthly_return_pct">Monthly return %</option>
+        <optgroup label="Leverage / debt">
+          <option value="total_debt_usd">Total debt ($)</option>
+          <option value="leverage_ratio">Leverage ratio (debt / equity)</option>
         </optgroup>
       </select>
     </label>
@@ -203,7 +205,8 @@
 
   function isMoney(metric) {
     return metric.includes('_usd') || metric === 'cash_subscriptions'
-        || metric === 'drip' || metric === 'redemptions' || metric === 'net_flow';
+        || metric === 'drip' || metric === 'redemptions' || metric === 'net_flow'
+        || metric === 'subs_best';
   }
   function isPerShareDollar(metric) {
     return metric.startsWith('nav_per_share_') || metric.startsWith('dist_');
@@ -221,6 +224,13 @@
   }
 
   function valueOf(row, metric) {
+    if (metric === 'subs_best') {
+      // NPORT cash subscriptions where reported (covers ALL subscriptions);
+      // else the 8-K unregistered-sale amount (full subs for private-only
+      // vehicles, the private slice for public-offering funds).
+      if (row.cash_subscriptions != null) return row.cash_subscriptions;
+      return (row.unreg_sales_usd != null) ? row.unreg_sales_usd : null;
+    }
     if (metric === 'net_flow') {
       const subs = row.cash_subscriptions || 0;
       const drip = row.drip || 0;
@@ -355,6 +365,7 @@
       ['dist_net_class_s',           'Dist net S',         'usd'],
       ['dist_net_class_d',           'Dist net D',         'usd'],
       ['cash_subscriptions',         'Cash subs',          'money'],
+      ['unreg_sales_usd',            'Unreg. sales',       'money'],
       ['drip',                       'DRIP',               'money'],
       ['redemptions',                'Redemptions',        'money'],
       ['monthly_return_pct',         'Month return',       'pct'],
