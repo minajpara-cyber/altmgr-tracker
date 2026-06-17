@@ -16,6 +16,7 @@
   .pill.strat-RE     { background: #c47a00; }
   .pill.strat-PE     { background: #2c9f3a; }
   .pill.strat-Infra  { background: #7b3f99; }
+  .pill.strat-Partnership { background: #b8860b; }
   .pill.mgr          { background: #4b5563; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
   .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
@@ -124,9 +125,13 @@
   const tToSponsor = new Map();
   const tToStrat   = new Map();
   const tToName    = new Map();
+  // Public-private partnership vehicles (sub-advised; manager doesn't own the
+  // fund) get their OWN strategy bucket so they don't inflate the core
+  // Credit/PE/RE/Infra strategy totals.
+  const effStrat = (u) => u.category === 'Partnership' ? 'Partnership' : u.strategy;
   for (const u of universe) {
     tToSponsor.set(u.ticker, u.sponsor);
-    tToStrat.set(u.ticker, u.strategy);
+    tToStrat.set(u.ticker, effStrat(u));
     tToName.set(u.ticker, u.legal_name || u.ticker);
   }
 
@@ -149,10 +154,11 @@
   const mgrsByStrat  = new Map();
   const fundsByStrat = new Map();
   for (const u of universe) {
-    if (!mgrsByStrat.has(u.strategy))  mgrsByStrat.set(u.strategy, new Set());
-    mgrsByStrat.get(u.strategy).add(u.sponsor);
-    if (!fundsByStrat.has(u.strategy)) fundsByStrat.set(u.strategy, new Set());
-    fundsByStrat.get(u.strategy).add(u.ticker);
+    const st = effStrat(u);
+    if (!mgrsByStrat.has(st))  mgrsByStrat.set(st, new Set());
+    mgrsByStrat.get(st).add(u.sponsor);
+    if (!fundsByStrat.has(st)) fundsByStrat.set(st, new Set());
+    fundsByStrat.get(st).add(u.ticker);
   }
 
   const latestByTicker = new Map();
@@ -167,7 +173,7 @@
   }
 
   // ---- Build strategy rows ----
-  const strategies = [...new Set(universe.map(u => u.strategy))].filter(Boolean).sort();
+  const strategies = [...new Set(universe.map(effStrat))].filter(Boolean).sort();
   const rows = [];
   let grandAum = 0;
   for (const st of strategies) {

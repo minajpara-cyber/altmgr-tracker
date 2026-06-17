@@ -126,11 +126,16 @@
   const quarters = data.quarters || [];
   const summary = data.summary_by_ticker || {};
 
-  // ticker -> sponsor / strategy / legal name
+  // ticker -> sponsor / strategy / legal name.
+  // Partnership vehicles (sub-advised; manager doesn't own the fund) are
+  // EXCLUDED from the manager rollup so KKR/Apollo headline AUM isn't
+  // inflated by funds they only sub-advise. They remain on the Universe page
+  // and get their own bucket on the Strategy tab.
   const tToSponsor = new Map();
   const tToStrat   = new Map();
   const tToName    = new Map();
-  for (const u of universe) {
+  const coreUniverse = universe.filter(u => u.category !== 'Partnership');
+  for (const u of coreUniverse) {
     tToSponsor.set(u.ticker, u.sponsor);
     tToStrat.set(u.ticker, u.strategy);
     tToName.set(u.ticker, u.legal_name || u.ticker);
@@ -161,7 +166,7 @@
   // Sponsor -> Set(strategies), Set(tickers)
   const stratsBy = new Map();
   const fundsBy  = new Map();
-  for (const u of universe) {
+  for (const u of coreUniverse) {
     if (!stratsBy.has(u.sponsor)) stratsBy.set(u.sponsor, new Set());
     stratsBy.get(u.sponsor).add(u.strategy);
     if (!fundsBy.has(u.sponsor)) fundsBy.set(u.sponsor, new Set());

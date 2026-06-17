@@ -99,6 +99,7 @@
       legal_name: u.legal_name,
       sponsor: u.sponsor,
       strategy: u.strategy,
+      category: u.category || 'Core',
       form_factor: u.form_factor,
       latest_period: latest ? latest.quarter_label : null,
       latest_form: latest ? latest.source_form : null,
@@ -164,7 +165,14 @@
          const t = cell.getValue();
          return `<a href="./fund.html?ticker=${encodeURIComponent(t)}"><span class="ticker-badge">${t}</span></a>`;
       }},
-      {title: 'Legal Name', field: 'legal_name', minWidth: 200},
+      {title: 'Legal Name', field: 'legal_name', minWidth: 200, formatter: (cell) => {
+         const r = cell.getRow().getData();
+         const name = cell.getValue() || '';
+         if (r.category === 'Partnership') {
+           return `${name} <span style="font-size:10px;font-weight:700;color:#fff;background:#b8860b;padding:1px 5px;border-radius:8px;white-space:nowrap">PARTNERSHIP</span>`;
+         }
+         return name;
+      }},
       {title: 'Sponsor', field: 'sponsor', width: 80},
       {title: 'Strategy', field: 'strategy', width: 80},
       {title: 'Latest Period', field: 'latest_period', width: 100, cssClass: 'num'},
