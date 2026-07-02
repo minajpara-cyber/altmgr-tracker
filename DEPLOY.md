@@ -83,3 +83,5 @@ GitHub Pages will pick up the change automatically in ~1 minute.
   slow.
 - **Charts don't load** — your network may block `unpkg.com` or `jsdelivr.net`.
   Try a different network.
+
+<!-- retrigger: pages build for d450edc hung on 2026-07-02; new SHA to restart -->
