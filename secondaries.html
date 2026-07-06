@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GP Stakes — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css">
+<style>
+  .chart-hint { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
+  .tbl { margin-bottom: 26px; }
+  h2 { margin-top: 26px; }
+  h3 { margin: 20px 0 4px; font-size: 14px; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .stat-card.headline .value { color: var(--accent); }
+  .controls-row { margin: 10px 0; }
+  .controls-row label { font-family: var(--mono); font-size: 12px; }
+  .controls-row select { width: auto; min-width: 320px; }
+  .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 4px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./manager.html">Manager</a>
+    <a href="./strategy.html">Strategy</a>
+    <a href="./monthly.html">Monthly</a>
+    <a href="./secondaries.html" class="active">GP Stakes</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html">Compare</a>
+    <a href="./filings.html">Filings</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>GP stakes — secondaries position data</h1>
+  <p class="chart-hint">
+    Position-level holdings of 17 evergreen secondaries / PE fund-of-funds
+    vehicles, parsed from semi-annual reports (cost + fair value per
+    underlying GP fund) and quarterly N-PORT filings (fair value). Fair value
+    is the GP's own mark (NAV practical expedient). "Entry uplift" is fair
+    value over cost at a position's first appearance — a proxy for the
+    secondary purchase discount. Cost drifts afterwards (returns of capital
+    reduce it, follow-ons increase it), so multiples on aged positions are
+    carrying multiples, not performance.
+  </p>
+
+  <div class="stat-row" id="stat-row">
+    <div class="stat-card"><div class="label">Funds covered</div><div class="value" id="stat-funds">…</div></div>
+    <div class="stat-card"><div class="label">Positions (latest)</div><div class="value" id="stat-pos">…</div></div>
+    <div class="stat-card"><div class="label">Fair value (latest)</div><div class="value" id="stat-fv">…</div></div>
+    <div class="stat-card"><div class="label">Cross-held GP funds</div><div class="value" id="stat-xh">…</div></div>
+  </div>
+
+  <h2>Coverage &amp; entry pricing by fund</h2>
+  <p class="chart-hint">Median entry uplift uses clean first observations of
+    secondary purchases only (acquired within ~13 months of the report).</p>
+  <div id="tbl-funds" class="tbl"></div>
+
+  <h2 id="value-creation">Value creation — day-one markup vs later appreciation</h2>
+  <p class="chart-hint">
+    Each fund's semi-annual gains split into three parts: <b>day-one markup</b>
+    (fair value over cost on newly appearing secondary purchases — buy at a
+    discount, immediately mark at the GP's NAV), <b>held appreciation</b>
+    (mark movement on positions held across both period-ends, net of
+    follow-ons / returns of capital) and <b>realized&nbsp;/&nbsp;unwound</b>
+    (appreciation of exiting positions leaving the unrealized bucket as it
+    converts to realized). The split is validated per period against the
+    fund's own statement of operations (dots on the chart).
+  </p>
+
+  <div class="stat-row">
+    <div class="stat-card headline">
+      <div class="label">Day-one markup share of value creation</div>
+      <div class="value" id="vc-share">…</div>
+      <div class="sub" id="vc-share-sub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Cumulative unrealized value creation</div>
+      <div class="value" id="vc-total">…</div>
+      <div class="sub">day-one markup + held appreciation</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Watched converting to realized</div>
+      <div class="value" id="vc-realized">…</div>
+      <div class="sub">appreciation unwound on exits</div>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <label>Fund:
+      <select id="vc-fund"></select>
+    </label>
+  </div>
+  <div class="chart-wrap short"><canvas id="vcChart"></canvas></div>
+  <p class="chart-hint" id="vc-skip-note"></p>
+
+  <h3>Cumulative by fund</h3>
+  <div id="tbl-vc" class="tbl"></div>
+  <p class="footnote" id="vc-footnote"></p>
+
+  <h2 id="pricing">Secondary-market pricing — entry price as % of NAV</h2>
+  <p class="chart-hint" id="pr-intro">
+    What our vehicles paid for GP fund stakes, as a percentage of the stake's
+    NAV at entry (cost &divide; first reported fair value; N-PORT-first
+    denominator to shorten the NAV lag). 83% of NAV is the same fact as a
+    +20% day-one uplift.
+  </p>
+  <div class="chart-wrap short"><canvas id="prChart"></canvas></div>
+  <p class="chart-hint" id="pr-note"></p>
+
+  <h3>GP-family pricing league</h3>
+  <p class="chart-hint">Where each sponsor family's funds change hands,
+    across all our holders' clean entry observations.</p>
+  <div id="tbl-league" class="tbl"></div>
+
+  <h3>Median entry price by holder</h3>
+  <p class="chart-hint" id="pr-holder-note"></p>
+  <div id="tbl-holder" class="tbl"></div>
+
+  <h2>Cross-held underlying GP funds</h2>
+  <p class="chart-hint">The same underlying fund held by several of our
+    vehicles. The multiple range compares holders' FV/cost at the latest
+    semi-annual where 2+ holders disclose cost (multiples outside 0.2–10x
+    excluded — near-zero residual cost after distributions is noise).</p>
+  <div id="tbl-xh" class="tbl"></div>
+
+  <h2>GP family exposure</h2>
+  <p class="chart-hint">Latest-period fair value across all 17 vehicles,
+    rolled up to the sponsor family of the underlying fund.</p>
+  <div id="tbl-gp" class="tbl"></div>
+
+  <h2>Largest positions</h2>
+  <div id="tbl-top" class="tbl"></div>
+</main>
+
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const fmtM = v => v == null ? "" : "$" + (v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
+const fmtBn = v => v == null ? "" : "$" + (v / 1e9).toLocaleString(undefined, {maximumFractionDigits: 1}) + "bn";
+const fmtPct = v => v == null ? "" : (v * 100).toFixed(1) + "%";
+const fmtX = v => v == null ? "" : Number(v).toFixed(2) + "x";
+
+fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
+  document.getElementById("refresh-meta").textContent =
+    "Positions data generated " + (d.generated_at || "").slice(0, 10);
+  document.getElementById("stat-funds").textContent = d.stats.n_funds;
+  document.getElementById("stat-pos").textContent =
+    d.stats.n_positions_latest.toLocaleString();
+  document.getElementById("stat-fv").textContent = fmtBn(d.stats.fv_latest);
+  document.getElementById("stat-xh").textContent =
+    d.stats.n_cross_held.toLocaleString();
+
+  new Tabulator("#tbl-funds", {
+    data: d.by_fund, layout: "fitColumns", height: "440px",
+    initialSort: [{column: "fv", dir: "desc"}],
+    columns: [
+      {title: "Fund", field: "label", minWidth: 190},
+      {title: "Ticker", field: "ticker", width: 90},
+      {title: "As of", field: "latest_period", width: 105},
+      {title: "Positions", field: "n_positions", sorter: "number", hozAlign: "right", width: 95},
+      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
+       formatter: c => fmtM(c.getValue()), width: 110},
+      {title: "Median entry uplift", field: "median_entry_uplift", sorter: "number",
+       hozAlign: "right", formatter: c => fmtPct(c.getValue()), width: 150},
+      {title: "% marked up day one", field: "share_marked_up", sorter: "number",
+       hozAlign: "right", formatter: c => fmtPct(c.getValue()), width: 160},
+      {title: "Clean entries", field: "n_entry_clean_sec", sorter: "number",
+       hozAlign: "right", width: 115},
+      {title: "Cross-held", field: "n_cross_held", sorter: "number", hozAlign: "right",
+       width: 100},
+    ],
+  });
+
+  new Tabulator("#tbl-xh", {
+    data: d.cross_holders, layout: "fitColumns", height: "520px",
+    columns: [
+      {title: "Underlying fund", field: "name", minWidth: 260},
+      {title: "GP family", field: "gp_family", width: 170},
+      {title: "Holders", field: "n_holders", sorter: "number", hozAlign: "right", width: 90},
+      {title: "Held by", field: "holders", minWidth: 200,
+       formatter: c => (c.getValue() || "").split("|").join(", ")},
+      {title: "FV (latest)", field: "fv_latest", sorter: "number", hozAlign: "right",
+       formatter: c => fmtM(c.getValue()), width: 110},
+      {title: "Mult low", field: "mult_low", sorter: "number", hozAlign: "right",
+       formatter: c => fmtX(c.getValue()), width: 95},
+      {title: "Mult high", field: "mult_high", sorter: "number", hozAlign: "right",
+       formatter: c => fmtX(c.getValue()), width: 95},
+      {title: "Spread", field: "mult_spread", sorter: "number", hozAlign: "right",
+       formatter: c => fmtX(c.getValue()), width: 90},
+      {title: "As of", field: "mult_period", width: 105},
+    ],
+  });
+
+  new Tabulator("#tbl-gp", {
+    data: d.gp_families, layout: "fitColumns", height: "440px",
+    columns: [
+      {title: "GP family", field: "family", minWidth: 220},
+      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
+       formatter: c => fmtM(c.getValue()), width: 130},
+      {title: "Underlying funds", field: "n_funds", sorter: "number", hozAlign: "right",
+       width: 140},
+      {title: "Our holders", field: "n_holders", sorter: "number", hozAlign: "right",
+       width: 120},
+    ],
+  });
+
+  new Tabulator("#tbl-top", {
+    data: d.top_positions, layout: "fitColumns", height: "520px",
+    columns: [
+      {title: "Position", field: "name", minWidth: 280},
+      {title: "GP family", field: "gp_family", width: 170},
+      {title: "Held by", field: "ticker", width: 100},
+      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
+       formatter: c => fmtM(c.getValue()), width: 120},
+      {title: "FV / cost", field: "multiple", sorter: "number", hozAlign: "right",
+       formatter: c => fmtX(c.getValue()), width: 100},
+    ],
+  });
+
+  // ================= shared helpers for the analytics sections =============
+  const labelByTicker = {};
+  (d.by_fund || []).forEach(f => { labelByTicker[f.ticker] = f.label; });
+  // signed $m (fmtM renders "$-12m" for negatives)
+  const fmtSM = v => v == null ? "" : (v < 0 ? "−" : "") + "$" +
+    Math.abs(v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
+  const fmtMoney = v => v == null ? "—" : (Math.abs(v) >= 995e6 ? fmtBn(v) : fmtM(v));
+
+  // ================= value creation =========================================
+  const vc = d.value_creation || {periods: [], cumulative: []};
+  const USABLE = new Set(["ok", "ok_small"]);
+  const FLAG_REASON = {
+    first_period: "first covered period — coverage start, not new buys",
+    na_cost: "cost disclosed for under 70% of fair value",
+    recon_miss: "fails the ±15% reconciliation gate",
+  };
+  const vcByT = {};
+  vc.periods.forEach(r => { (vcByT[r.ticker] = vcByT[r.ticker] || []).push(r); });
+  Object.values(vcByT).forEach(a => a.sort((x, y) => x.period_end < y.period_end ? -1 : 1));
+  const usableCount = t => (vcByT[t] || []).filter(r => USABLE.has(r.flag)).length;
+  const compCount = t => (vcByT[t] || []).filter(r => r.new_markup != null).length;
+
+  // headline stat: aggregate day-one markup share across funds
+  let aggMk = 0, aggHeld = 0, aggReal = 0, nFundsComp = 0;
+  vc.cumulative.forEach(r => {
+    if (r.cum_markup == null) return;
+    aggMk += r.cum_markup; aggHeld += r.cum_held; aggReal += r.cum_realized; nFundsComp++;
+  });
+  document.getElementById("vc-share").textContent =
+    aggMk + aggHeld > 0 ? (100 * aggMk / (aggMk + aggHeld)).toFixed(0) + "%" : "—";
+  document.getElementById("vc-share-sub").textContent =
+    "across " + nFundsComp + " funds with decomposable periods";
+  document.getElementById("vc-total").textContent = fmtMoney(aggMk + aggHeld);
+  document.getElementById("vc-realized").textContent = fmtMoney(aggReal);
+
+  // fund selector: most chartable periods first
+  const cumByT = {};
+  vc.cumulative.forEach(r => { cumByT[r.ticker] = r; });
+  const vcSel = document.getElementById("vc-fund");
+  Object.keys(vcByT)
+    .sort((a, b) => usableCount(b) - usableCount(a) ||
+      ((cumByT[b] || {}).cum_markup || 0) - ((cumByT[a] || {}).cum_markup || 0))
+    .forEach(t => {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t + " — " + (labelByTicker[t] || t) +
+        " (" + usableCount(t) + " chartable period" + (usableCount(t) === 1 ? "" : "s") + ")";
+      vcSel.appendChild(o);
+    });
+
+  let vcChart = null;
+  function renderVC() {
+    const t = vcSel.value;
+    const rows = vcByT[t] || [];
+    const labels = rows.map(r => r.period_end.slice(0, 7));
+    const use = rows.map(r => USABLE.has(r.flag));
+    const mk = rows.map((r, i) => use[i] ? r.new_markup : null);
+    const ha = rows.map((r, i) => use[i] ? r.held_appreciation : null);
+    const un = rows.map((r, i) => use[i] && r.exit_unwind != null ? -r.exit_unwind : null);
+    const st = rows.map(r => r.stmt_unrealized_change);
+
+    const skipped = {};
+    rows.forEach((r, i) => { if (!use[i]) (skipped[r.flag] = skipped[r.flag] || []).push(labels[i]); });
+    const parts = Object.entries(skipped)
+      .map(([f, ps]) => ps.join(", ") + " (" + (FLAG_REASON[f] || f) + ")");
+    const nUse = use.filter(Boolean).length;
+    document.getElementById("vc-skip-note").textContent =
+      (nUse === 0 ? "No period passes the gates for this fund — no bars; statement totals (dots) shown for context. " : "") +
+      (parts.length ? "Not decomposed: " + parts.join("; ") + ". Dots = statement Δ unrealized, shown wherever reported." : "");
+
+    if (vcChart) vcChart.destroy();
+    vcChart = new Chart(document.getElementById("vcChart").getContext("2d"), {
+      data: {
+        labels,
+        datasets: [
+          {type: "bar", label: "Day-one markup", data: mk, stack: "vc",
+           backgroundColor: "rgba(196,122,0,0.8)"},
+          {type: "bar", label: "Held appreciation", data: ha, stack: "vc",
+           backgroundColor: "rgba(31,95,166,0.7)"},
+          {type: "bar", label: "Realized — unwound from unrealized", data: un, stack: "vc",
+           backgroundColor: "rgba(120,120,120,0.55)"},
+          {type: "line", label: "Statement Δ unrealized", data: st, showLine: false,
+           pointStyle: "rectRot", pointRadius: 4, pointHoverRadius: 5,
+           borderColor: "#131313", backgroundColor: "#131313"},
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode: "index", intersect: false},
+        plugins: {
+          legend: {position: "bottom", labels: {font: {size: 11}, boxWidth: 10}},
+          tooltip: {
+            filter: item => item.raw != null,
+            callbacks: {
+              label: c => c.datasetIndex === 2
+                ? "Unwound out of unrealized: " + fmtSM(-c.raw)
+                : c.dataset.label + ": " + fmtSM(c.raw),
+              footer: items => {
+                if (!items.length) return "";
+                const r = rows[items[0].dataIndex];
+                return (r.recon_ratio != null ? "recon ratio " + r.recon_ratio.toFixed(2) + " · " : "") + r.flag;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {stacked: true, ticks: {font: {size: 10}, maxRotation: 0, autoSkip: true}},
+          y: {stacked: true, ticks: {font: {size: 10}, callback: v => fmtSM(v)},
+              title: {display: true, text: "$ per semi-annual period", font: {size: 10}}},
+        },
+      },
+    });
+  }
+  vcSel.addEventListener("change", renderVC);
+  if (vcSel.options.length) renderVC();
+
+  const vcRows = vc.cumulative.map(r => Object.assign({}, r, {
+    label: labelByTicker[r.ticker] || r.ticker,
+    recon: compCount(r.ticker) ? usableCount(r.ticker) + "/" + compCount(r.ticker) : "—",
+    cum_total: r.cum_markup == null ? null : r.cum_markup + r.cum_held,
+  }));
+  new Tabulator("#tbl-vc", {
+    data: vcRows, layout: "fitColumns", height: "520px",
+    initialSort: [{column: "cum_total", dir: "desc"}],
+    columns: [
+      {title: "Fund", field: "label", minWidth: 190},
+      {title: "Ticker", field: "ticker", width: 90},
+      {title: "Window", field: "window_from", width: 150,
+       formatter: c => {
+         const r = c.getRow().getData();
+         return r.window_from ? r.window_from.slice(0, 7) + " → " + (r.window_to || "").slice(0, 7) : "";
+       }},
+      {title: "Periods", field: "periods_used", sorter: "number", hozAlign: "right", width: 85},
+      {title: "Recon pass", field: "recon", hozAlign: "right", width: 100},
+      {title: "Day-one markup", field: "cum_markup", sorter: "number", hozAlign: "right",
+       formatter: c => fmtSM(c.getValue()), width: 130},
+      {title: "Held appreciation", field: "cum_held", sorter: "number", hozAlign: "right",
+       formatter: c => fmtSM(c.getValue()), width: 140},
+      {title: "Value creation", field: "cum_total", sorter: "number", hozAlign: "right",
+       formatter: c => fmtSM(c.getValue()), width: 120},
+      {title: "Realized (unwound)", field: "cum_realized", sorter: "number", hozAlign: "right",
+       formatter: c => fmtSM(c.getValue()), width: 145},
+      {title: "Day-one share", field: "markup_share_of_total", sorter: "number", hozAlign: "right",
+       formatter: c => {
+         const v = c.getValue();
+         return v == null ? "" :
+           '<span style="color:var(--accent);font-weight:600">' + (v * 100).toFixed(1) + "%</span>";
+       }, width: 115},
+    ],
+  });
+
+  const flagN = {};
+  vc.periods.forEach(r => { flagN[r.flag] = (flagN[r.flag] || 0) + 1; });
+  const nComp = vc.periods.filter(r => r.new_markup != null).length;
+  document.getElementById("vc-footnote").textContent =
+    "Reconciliation status: per period, day-one markup + held appreciation − unwound must land " +
+    "within ±15% of the statement of operations' change in unrealized appreciation " +
+    "(FX forwards, deferred taxes and expense noise sit outside the position panel). " +
+    "Of " + vc.periods.length + " fund-periods, " + nComp + " are computable; " +
+    ((flagN.ok || 0) + (flagN.ok_small || 0)) + " pass the gate (" + (flagN.ok_small || 0) +
+    " via the small-statement absolute test) and " + (flagN.recon_miss || 0) +
+    " miss it — misses are excluded from the chart but included in the cumulative table. " +
+    "Not computable: " + (flagN.na_cost || 0) + " periods with cost disclosed for under 70% of " +
+    "fair value, " + (flagN.first_period || 0) + " first-coverage periods. “Value creation” " +
+    "= day-one markup + held appreciation; realized (unwound) is appreciation those totals already " +
+    "counted that later converted to realized on exits, shown separately to avoid double counting.";
+
+  // ================= secondary pricing ======================================
+  const pr = d.pricing || {};
+  if (pr.meta) {
+    document.getElementById("pr-intro").innerHTML +=
+      " Sample: <b>" + pr.meta.n_total.toLocaleString() + "</b> clean secondary entries; " +
+      "overall median <b>" + fmtPct(pr.meta.median) + " of NAV</b> (" + fmtPct(pr.meta.median_adj) +
+      " after backing NAV drift out of the median " + pr.meta.median_lag_days + "-day lag).";
+  }
+
+  const halves = [...new Set((pr.by_strategy_half || []).map(r => r.half))].sort();
+  const STRATS = [
+    ["buyout", "Buyout", "#1f5fa6"],
+    ["growth", "Growth", "#c47a00"],
+    ["venture", "Venture", "#6d4fa1"],
+    ["credit", "Credit", "#14803c"],
+    ["real_assets", "Real assets", "#0f766e"],
+  ];
+  const prCell = {};
+  (pr.by_strategy_half || []).forEach(r => { prCell[r.strategy + "|" + r.half] = r; });
+  const prDatasets = STRATS
+    .filter(([s]) => halves.some(h => prCell[s + "|" + h]))
+    .map(([s, lab, col]) => {
+      const rs = halves.map(h => prCell[s + "|" + h] || null);
+      return {
+        label: lab, _rows: rs,
+        data: rs.map(r => r ? r.median * 100 : null),
+        borderColor: col, backgroundColor: col,
+        borderWidth: 1.8, tension: 0.15, spanGaps: true,
+        pointRadius: 3.5, pointHoverRadius: 5,
+        pointBackgroundColor: rs.map(r => r && r.n >= 10 ? col : "#ffffff"),
+        pointBorderColor: col,
+        segment: {borderDash: c => {
+          const a = rs[c.p0DataIndex], b = rs[c.p1DataIndex];
+          return (!a || !b || a.n < 10 || b.n < 10) ? [4, 3] : undefined;
+        }},
+      };
+    });
+  new Chart(document.getElementById("prChart").getContext("2d"), {
+    type: "line",
+    data: {labels: halves, datasets: prDatasets},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: {mode: "index", intersect: false},
+      plugins: {
+        legend: {position: "bottom", labels: {font: {size: 11}, boxWidth: 10}},
+        tooltip: {callbacks: {
+          label: c => {
+            const r = c.dataset._rows[c.dataIndex];
+            return r ? c.dataset.label + ": median " + fmtPct(r.median) +
+              " (n=" + r.n + (r.n < 10 ? " — small sample" : "") + ")" : null;
+          },
+          afterLabel: c => {
+            const r = c.dataset._rows[c.dataIndex];
+            return r ? "    p25–p75 " + fmtPct(r.p25) + "–" + fmtPct(r.p75) +
+              ", $-weighted " + fmtPct(r.wavg) : null;
+          },
+        }},
+      },
+      scales: {
+        x: {ticks: {font: {size: 10}, maxRotation: 0}},
+        y: {ticks: {font: {size: 10}, callback: v => v.toFixed(0) + "%"},
+            title: {display: true, text: "Median entry price, % of NAV", font: {size: 10}}},
+      },
+    },
+  });
+
+  const dt = {};
+  (pr.by_deal_type || []).forEach(r => { dt[r.deal_type] = r; });
+  let prNote = "Hollow points / dashed segments: fewer than 10 observations in that " +
+    "half-year — indicative only (the sample is concentrated 2023H2 onward).";
+  if (dt.gp_led && dt.lp_stake) {
+    prNote += " GP-led continuation vehicles price closer to NAV: median " +
+      fmtPct(dt.gp_led.median) + " (n=" + dt.gp_led.n + ") vs " +
+      fmtPct(dt.lp_stake.median) + " for LP stakes (n=" + dt.lp_stake.n.toLocaleString() + ").";
+  }
+  document.getElementById("pr-note").textContent = prNote;
+
+  new Tabulator("#tbl-league", {
+    data: pr.gp_league || [], layout: "fitColumns", height: "440px",
+    initialSort: [{column: "n", dir: "desc"}],
+    columns: [
+      {title: "GP family", field: "family", minWidth: 180},
+      {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 75},
+      {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
+       formatter: c => fmtPct(c.getValue()), width: 175},
+      {title: "Latest-half median", field: "latest_median", sorter: "number", hozAlign: "right",
+       formatter: c => fmtPct(c.getValue()), width: 150},
+      {title: "Held by", field: "holders", minWidth: 220,
+       formatter: c => (c.getValue() || []).join(", ")},
+    ],
+  });
+
+  document.getElementById("pr-holder-note").textContent =
+    "Median across each vehicle's clean entries — mixes strategy and vintage, " +
+    "so differences reflect mandate as much as execution.";
+  new Tabulator("#tbl-holder", {
+    data: (pr.by_holder || []).map(r =>
+      Object.assign({}, r, {label: labelByTicker[r.ticker] || r.ticker})),
+    layout: "fitColumns",
+    initialSort: [{column: "median", dir: "asc"}],
+    columns: [
+      {title: "Ticker", field: "ticker", width: 100},
+      {title: "Fund", field: "label", minWidth: 220},
+      {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 80},
+      {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
+       formatter: c => fmtPct(c.getValue()), width: 180},
+    ],
+  });
+});
+</script>
+</body>
+</html>
