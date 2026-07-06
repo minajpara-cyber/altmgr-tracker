@@ -17,6 +17,11 @@
   .controls-row label { font-family: var(--mono); font-size: 12px; }
   .controls-row select { width: auto; min-width: 320px; }
   .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 4px; line-height: 1.5; }
+  .spon-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; margin-bottom: 26px; }
+  .spon-chart { flex: 1 1 460px; min-width: 380px; }
+  .spon-tbl { flex: 1 1 480px; min-width: 380px; margin-bottom: 0; }
+  #tbl-league .tabulator-row { cursor: pointer; }
+  .tabulator-row.tabulator-selected { background: #fdf2df !important; }
 </style>
 </head>
 <body>
@@ -114,8 +119,18 @@
 
   <h3>GP-family pricing league</h3>
   <p class="chart-hint">Where each sponsor family's funds change hands,
-    across all our holders' clean entry observations.</p>
+    across all our holders' clean entry observations.
+    <b>Click rows to select sponsors</b> — the chart and underlying-fund
+    table below follow your selection (click again to deselect).</p>
   <div id="tbl-league" class="tbl"></div>
+
+  <h3>Selected sponsors — pricing over time &amp; underlying stakes</h3>
+  <p class="chart-hint" id="spon-note">No sponsors selected — click rows in
+    the league table above (multi-select supported).</p>
+  <div class="spon-row">
+    <div class="chart-wrap short spon-chart"><canvas id="sponChart"></canvas></div>
+    <div id="tbl-spon" class="tbl spon-tbl"></div>
+  </div>
 
   <h3>Median entry price by holder</h3>
   <p class="chart-hint" id="pr-holder-note"></p>
@@ -235,7 +250,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   const USABLE = new Set(["ok", "ok_small"]);
   const FLAG_REASON = {
     first_period: "first covered period — coverage start, not new buys",
-    na_cost: "cost disclosed for under 70% of fair value",
+    na_cost: "per-position cost not disclosed — most funds only added it in 2024–25; grey bar = reported Δ unrealized, unsplit",
     recon_miss: "fails the ±15% reconciliation gate",
   };
   const vcByT = {};
@@ -282,6 +297,11 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     const ha = rows.map((r, i) => use[i] ? r.held_appreciation : null);
     const un = rows.map((r, i) => use[i] && r.exit_unwind != null ? -r.exit_unwind : null);
     const st = rows.map(r => r.stmt_unrealized_change);
+    // periods without per-position cost still have the fund's own reported
+    // Δ unrealized — draw it as a grey bar so the history isn't blank
+    // (most funds only began disclosing per-position cost in 2024–25)
+    const tot = rows.map((r, i) =>
+      !use[i] && r.stmt_unrealized_change != null ? r.stmt_unrealized_change : null);
 
     const skipped = {};
     rows.forEach((r, i) => { if (!use[i]) (skipped[r.flag] = skipped[r.flag] || []).push(labels[i]); });
@@ -289,7 +309,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       .map(([f, ps]) => ps.join(", ") + " (" + (FLAG_REASON[f] || f) + ")");
     const nUse = use.filter(Boolean).length;
     document.getElementById("vc-skip-note").textContent =
-      (nUse === 0 ? "No period passes the gates for this fund — no bars; statement totals (dots) shown for context. " : "") +
+      (nUse === 0 ? "No period passes the decomposition gates for this fund — grey bars show its reported Δ unrealized without the markup/appreciation split. " : "") +
       (parts.length ? "Not decomposed: " + parts.join("; ") + ". Dots = statement Δ unrealized, shown wherever reported." : "");
 
     if (vcChart) vcChart.destroy();
@@ -303,6 +323,9 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
            backgroundColor: "rgba(31,95,166,0.7)"},
           {type: "bar", label: "Realized — unwound from unrealized", data: un, stack: "vc",
            backgroundColor: "rgba(120,120,120,0.55)"},
+          {type: "bar", label: "Δ unrealized (split unavailable)", data: tot, stack: "vc",
+           backgroundColor: "rgba(170,170,170,0.30)",
+           borderColor: "rgba(120,120,120,0.7)", borderWidth: 1},
           {type: "line", label: "Statement Δ unrealized", data: st, showLine: false,
            pointStyle: "rectRot", pointRadius: 4, pointHoverRadius: 5,
            borderColor: "#131313", backgroundColor: "#131313"},
@@ -466,9 +489,10 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   }
   document.getElementById("pr-note").textContent = prNote;
 
-  new Tabulator("#tbl-league", {
+  const leagueTbl = new Tabulator("#tbl-league", {
     data: pr.gp_league || [], layout: "fitColumns", height: "440px",
     initialSort: [{column: "n", dir: "desc"}],
+    selectable: true,
     columns: [
       {title: "GP family", field: "family", minWidth: 180},
       {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 75},
@@ -480,6 +504,98 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
        formatter: c => (c.getValue() || []).join(", ")},
     ],
   });
+
+  // ---- sponsor detail: chart + underlying stakes for selected families ----
+  const entries = pr.entries || [];
+  const entryHalves = [...new Set(entries.map(e => e.h))].sort();
+  const SPON_COLORS = ["#1f5fa6", "#c47a00", "#6d4fa1", "#14803c", "#0f766e",
+                       "#b3382c", "#4b5563", "#8a6d1a"];
+  const medOf = a => {
+    if (!a.length) return null;
+    const s = [...a].sort((x, y) => x - y);
+    return s.length % 2 ? s[(s.length - 1) / 2]
+      : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  };
+  let sponChart = null, sponTbl = null;
+
+  function renderSpon(fams) {
+    const note = document.getElementById("spon-note");
+    if (!fams.length) {
+      note.textContent = "No sponsors selected — click rows in the league table above (multi-select supported).";
+      if (sponChart) { sponChart.destroy(); sponChart = null; }
+      if (sponTbl) { sponTbl.destroy(); sponTbl = null; }
+      return;
+    }
+    const sel = entries.filter(e => fams.includes(e.f));
+    note.textContent = fams.join(", ") + " — " + sel.length +
+      " clean entries. Hollow points: fewer than 5 observations that half.";
+
+    // one line per sponsor + a combined line when 2+ selected
+    const datasets = [];
+    const mkLine = (label, rows, color, dashed) => {
+      const byH = {};
+      rows.forEach(e => (byH[e.h] = byH[e.h] || []).push(e.p));
+      const pts = entryHalves.map(h => byH[h] || null);
+      return {
+        label, _n: pts.map(a => a ? a.length : 0),
+        data: pts.map(a => a ? medOf(a) * 100 : null),
+        borderColor: color, backgroundColor: color,
+        borderWidth: dashed ? 1.4 : 1.8, tension: 0.15, spanGaps: true,
+        borderDash: dashed ? [5, 4] : undefined,
+        pointRadius: 3.5, pointHoverRadius: 5,
+        pointBackgroundColor: pts.map(a => a && a.length >= 5 ? color : "#ffffff"),
+        pointBorderColor: color,
+      };
+    };
+    fams.slice(0, 8).forEach((f, i) =>
+      datasets.push(mkLine(f, sel.filter(e => e.f === f), SPON_COLORS[i % SPON_COLORS.length], false)));
+    if (fams.length > 1)
+      datasets.push(mkLine("Selected combined", sel, "#131313", true));
+
+    if (sponChart) sponChart.destroy();
+    sponChart = new Chart(document.getElementById("sponChart").getContext("2d"), {
+      type: "line",
+      data: {labels: entryHalves, datasets},
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode: "index", intersect: false},
+        plugins: {
+          legend: {position: "bottom", labels: {font: {size: 11}, boxWidth: 10}},
+          tooltip: {callbacks: {
+            label: c => c.raw == null ? null :
+              c.dataset.label + ": median " + c.raw.toFixed(1) + "% of NAV (n=" +
+              c.dataset._n[c.dataIndex] + ")",
+          }},
+        },
+        scales: {
+          x: {ticks: {font: {size: 10}, maxRotation: 0}},
+          y: {ticks: {font: {size: 10}, callback: v => v.toFixed(0) + "%"},
+              title: {display: true, text: "Median entry price, % of NAV", font: {size: 10}}},
+        },
+      },
+    });
+
+    const rows = sel.map(e => ({
+      name: e.n, family: e.f, strategy: e.s, holder: e.t,
+      acq: e.d, price: e.p, fv: e.v,
+    })).sort((a, b) => (b.acq || "").localeCompare(a.acq || ""));
+    if (sponTbl) sponTbl.destroy();
+    sponTbl = new Tabulator("#tbl-spon", {
+      data: rows, layout: "fitColumns", height: "340px",
+      columns: [
+        {title: "Underlying fund", field: "name", minWidth: 220},
+        {title: "Sponsor", field: "family", width: 130},
+        {title: "Strategy", field: "strategy", width: 100},
+        {title: "Holder", field: "holder", width: 90},
+        {title: "Acquired", field: "acq", width: 100},
+        {title: "Price (% NAV)", field: "price", sorter: "number", hozAlign: "right",
+         formatter: c => fmtPct(c.getValue()), width: 120},
+        {title: "Entry FV", field: "fv", sorter: "number", hozAlign: "right",
+         formatter: c => fmtM(c.getValue()), width: 100},
+      ],
+    });
+  }
+  leagueTbl.on("rowSelectionChanged", data => renderSpon(data.map(r => r.family)));
 
   document.getElementById("pr-holder-note").textContent =
     "Median across each vehicle's clean entries — mixes strategy and vintage, " +
