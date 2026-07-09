@@ -226,11 +226,23 @@
       key: 'dist_per_share',
       kind: 'usd',
     });
-    // Per-share quarterly TOTAL return (NAV change + distribution per share),
-    // already precomputed in 09_quarterize.py per class.
+    // Fund-REPORTED per-class total return (Financial Highlights, YTD chains
+    // de-telescoped to quarterly in 09_quarterize.py) — the fund's own
+    // '40-Act total-return figure; shown first when available.
+    const reportedClasses = SHARE_CLASSES.filter(c =>
+      quarters.some(q => q['fh_reported_return_class_' + c] != null));
+    for (const c of reportedClasses) {
+      psRows.push({
+        label: `Reported total return (%) — Class ${c.toUpperCase()}`,
+        key: 'fh_reported_return_class_' + c,
+        kind: 'pctSigned',
+      });
+    }
+    // Per-share quarterly TOTAL return derived by us (NAV change +
+    // distribution per share), precomputed in 09_quarterize.py per class.
     for (const c of classesWithData) {
       psRows.push({
-        label: `Total return (%) — Class ${c.toUpperCase()}`,
+        label: `Total return, derived (%) — Class ${c.toUpperCase()}`,
         key: 'per_share_return_class_' + c,
         kind: 'pctSigned',
       });

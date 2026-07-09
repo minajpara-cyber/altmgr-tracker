@@ -28,15 +28,17 @@
     <aside class="compare-side">
       <h3>Metric</h3>
       <select id="metric">
-        <optgroup label="Stock measures">
-          <option value="unified_return_pct">Quarterly return % (best available)</option>
-          <option value="nav_eop">NAV (end of quarter)</option>
-          <option value="nav_change_pct">NAV change %</option>
-          <option value="total_return_pct">Total return % (operating)</option>
-          <option value="bridge_return_pct">Total return % (NAV bridge — all funds)</option>
-          <option value="per_share_return_class_i">Per-share total return % (Class I)</option>
-          <option value="per_share_return_class_s">Per-share total return % (Class S)</option>
-          <option value="per_share_return_class_d">Per-share total return % (Class D)</option>
+        <optgroup label="Returns (per share, investor experience)">
+          <option value="unified_return_pct">Total return % — best available</option>
+          <option value="ret_decomp">Return split: NAV appreciation + distributions</option>
+          <option value="ret_nav_appr">NAV appreciation % (per share)</option>
+          <option value="ret_dist_yield">Distribution yield % (per share)</option>
+          <option value="fh_reported_return_class_i">Total return % — fund-reported (Class I)</option>
+          <option value="per_share_return_class_i">Total return % — derived (Class I)</option>
+        </optgroup>
+        <optgroup label="Fund size">
+          <option value="nav_eop">Net assets / NAV $ (end of quarter)</option>
+          <option value="nav_change_pct">Fund NAV growth % (incl. flows — not a return)</option>
         </optgroup>
         <optgroup label="Flow measures">
           <option value="issuance_total">Cash subscriptions</option>
@@ -52,6 +54,7 @@
           <option value="total_investment_income_or_revenues">Investment income / revenues</option>
         </optgroup>
       </select>
+      <div id="metric-note" style="font-size:11px; color:var(--muted, #777); margin:4px 0 2px; line-height:1.35;"></div>
 
       <div class="unit-toggle" id="unit-toggle">
         <label><input type="radio" name="unit" value="usd" checked> $ Millions</label>
@@ -135,6 +138,7 @@
       const hay = (t + ' ' + (u.legal_name || '') + ' ' + (u.sponsor || '') + ' ' + (u.strategy || '')).toLowerCase();
       if (q && !hay.includes(q)) continue;
       const label = document.createElement('label');
+      label.title = u.legal_name || t;
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.value = t;
@@ -226,8 +230,9 @@
     r.addEventListener('change', update));
 
   // Metrics whose values are inherently percentages — toggle is locked to %
-  const INHERENT_PCT = new Set(['nav_change_pct', 'total_return_pct',
-    'bridge_return_pct', 'unified_return_pct',
+  const INHERENT_PCT = new Set(['nav_change_pct',
+    'unified_return_pct', 'fh_reported_return_class_i',
+    'ret_decomp', 'ret_nav_appr', 'ret_dist_yield',
     'per_share_return_class_i', 'per_share_return_class_s',
     'per_share_return_class_d', 'per_share_return_class_t',
     'per_share_return_class_e']);
@@ -236,13 +241,63 @@
   // Outflow metrics that should display as negatives even when stored positive
   const NEG_METRICS = new Set(['repurchases_total', 'distributions_total']);
 
+  // One-line explainer per return metric, shown under the dropdown.
+  const METRIC_NOTES = {
+    unified_return_pct: 'Quarterly total return, best source per fund: fund-reported Financial-Highlights figure, else fund-reported NPORT monthly compounding, else derived from NAV/share + distributions.',
+    ret_decomp: 'Total return split into its two parts per quarter: change in NAV per share (appreciation, can be negative) stacked with cash paid out (distribution yield). Bars per fund; hover for the total.',
+    ret_nav_appr: 'Change in NAV per share only (Class I), excluding distributions. A credit fund can earn 10%/yr with zero NAV appreciation.',
+    ret_dist_yield: 'Distributions per share as % of prior-quarter NAV per share. The income half of total return.',
+    fh_reported_return_class_i: 'The fund’s own published total return (Financial Highlights, Class I), de-telescoped to quarterly. Not every fund/quarter has one.',
+    per_share_return_class_i: 'Our derived total return: NAV/share change + distributions per share, over prior NAV/share. Agrees with fund-reported within ~15bps where both exist.',
+    nav_change_pct: 'Growth of total fund NAV in $, driven by BOTH performance and investor flows — use a Returns metric for performance.',
+    nav_eop: 'Total net assets at quarter end, $ millions.',
+  };
+
+  // Per-share return decomposition (Class I): NAV appreciation + distribution
+  // yield, linked to the prior quarter's NAV/share exactly like
+  // 09_quarterize derives per_share_return_class_i (appr + dy = derived TR).
+  const decompByTicker = new Map();
+  for (const [t, arr] of quartersByTicker) {
+    const m = new Map();
+    let prevNav = null, prevKey = null;
+    for (const q of arr) {
+      if (!(q.quarter_label || '').startsWith('Q')) continue;
+      const key = quarterSortKey(q.quarter_label);
+      const nav = q.nav_per_share_class_i;
+      // Only decompose when the prior NAV/share is from the IMMEDIATELY
+      // preceding quarter (diff 1 within a year, 7 across Q4->Q1). Interval
+      // funds report per-share NAV only semi-annually — spanning the gap
+      // would book 6 months of appreciation into one quarter's bar.
+      const adjacent = prevKey != null && (key - prevKey === 1 || key - prevKey === 7);
+      if (adjacent && prevNav != null && nav != null && prevNav !== 0) {
+        const appr = (nav - prevNav) / prevNav;
+        // dist_per_share missing while the quarter is otherwise known =
+        // no captured payout — treat as 0 (PE perpetuals genuinely pay none)
+        const dy = q.dist_per_share != null ? q.dist_per_share / prevNav : 0;
+        // Plausibility: NAV-based vehicles don't move >25%/qtr per share, and
+        // 09_quarterize caps dist at 10% of NAV — bigger = extraction noise.
+        if (Math.abs(appr) <= 0.25 && dy >= 0 && dy <= 0.10) {
+          m.set(q.quarter_label, {
+            appr, dy,
+            total: appr + dy,
+            reported: q.fh_reported_return_class_i != null ? q.fh_reported_return_class_i : null,
+          });
+        }
+      }
+      if (nav != null) { prevNav = nav; prevKey = key; }
+    }
+    decompByTicker.set(t, m);
+  }
+
   function computeMetricValue(q, metric, isPctMode) {
     if (q == null) return null;
-    if (metric === 'total_return_pct') {
-      const nio = q.net_inc_from_ops;
-      const bop = q.nav_bop;
-      if (nio == null || bop == null || bop === 0) return null;
-      return nio / bop;
+    // Synthetic per-share metrics from the decomposition map
+    if (metric === 'ret_nav_appr' || metric === 'ret_dist_yield' || metric === 'ret_decomp') {
+      const d = (decompByTicker.get(q.ticker) || new Map()).get(q.quarter_label);
+      if (!d) return null;
+      if (metric === 'ret_nav_appr') return d.appr;
+      if (metric === 'ret_dist_yield') return d.dy;
+      return d.total;  // ret_decomp: table + fallbacks use the summed total
     }
     let v;
     if (metric === 'total_subscriptions') {
@@ -285,7 +340,14 @@
     if (stackedLocked && stackedRadio.checked) {
       lineRadio.checked = true;
     }
-    chartWrap.classList.toggle('locked', stackedLocked);
+    // The decomposition view IS its own chart type (stacked bars per fund) —
+    // lock the line/stacked choice entirely.
+    const decomp = metric === 'ret_decomp';
+    lineRadio.disabled = decomp;
+    chartWrap.classList.toggle('locked', stackedLocked || decomp);
+
+    const note = document.getElementById('metric-note');
+    if (note) note.textContent = METRIC_NOTES[metric] || '';
   }
 
   // Y-axis scaling — let the user clip outliers or set manual bounds
@@ -336,7 +398,74 @@
     const isPct = unit === 'pct';
 
     const chartType = document.querySelector('input[name="chart"]:checked').value;
-    const stacked = chartType === 'stacked';
+    const stacked = chartType === 'stacked' && metric !== 'ret_decomp';
+
+    // ---- Return decomposition: two stacked bar segments per fund ----------
+    if (metric === 'ret_decomp') {
+      const usedLabels = new Set();
+      const datasets = [];
+      const tickerList = [...selected].sort();
+      for (const t of tickerList) {
+        const m = decompByTicker.get(t) || new Map();
+        for (const lbl of m.keys()) usedLabels.add(lbl);
+      }
+      const finalLabels = [...usedLabels].sort((a, b) => quarterSortKey(a) - quarterSortKey(b));
+      for (const t of tickerList) {
+        const m = decompByTicker.get(t) || new Map();
+        const base = colorByTicker[t];
+        datasets.push({
+          type: 'bar', label: `${t} · distributions`, stack: t,
+          data: finalLabels.map(lbl => ({ x: lbl, y: m.has(lbl) ? m.get(lbl).dy : null })),
+          backgroundColor: base, borderWidth: 0,
+        });
+        datasets.push({
+          type: 'bar', label: `${t} · NAV appreciation`, stack: t,
+          data: finalLabels.map(lbl => ({ x: lbl, y: m.has(lbl) ? m.get(lbl).appr : null })),
+          backgroundColor: base + '66', borderColor: base, borderWidth: 1,
+        });
+      }
+      if (chart) chart.destroy();
+      const ctx = document.getElementById('cmpChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0] ? items[0].parsed.x : '',
+                label: (ctx) => {
+                  const t = ctx.dataset.stack;
+                  const d = (decompByTicker.get(t) || new Map()).get(ctx.parsed.x);
+                  if (!d) return `${ctx.dataset.label}: —`;
+                  const lines = [
+                    `${t} — NAV appreciation: ${fmtPct(d.appr)}`,
+                    `${t} — distribution yield: ${fmtPct(d.dy)}`,
+                    `${t} — total (derived): ${fmtPct(d.total)}`,
+                  ];
+                  if (d.reported != null) lines.push(`${t} — fund-reported total: ${fmtPct(d.reported)}`);
+                  return lines;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { type: 'category', labels: finalLabels, stacked: true,
+                 ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+            y: { stacked: true,
+                 ticks: { font: { size: 10 }, callback: (v) => fmtPct(v) },
+                 ...computeYBounds(datasets) },
+          },
+        },
+      });
+      renderCompareTable(metric, true, finalLabels);
+      return;
+    }
 
     // For stacked, we want a continuous dense x-axis. Use the master allLabels
     // list so missing quarters become explicit zeros (avoids holes in fill).
@@ -422,9 +551,9 @@
       table.innerHTML = '<tbody><tr><td class="row-label">Select at least one fund to see data.</td></tr></tbody>';
       return;
     }
-    let html = '<thead><tr><th class="row-label">Ticker</th>';
+    let html = '<thead><tr><th class="row-label">Fund</th>';
     for (const lbl of labels) html += `<th class="qhead">${lbl}</th>`;
-    html += '<th class="qhead">Latest</th><th class="qhead">TTM sum / avg</th>';
+    html += `<th class="qhead">Latest</th><th class="qhead">${isPct ? 'TTM<div class="qhead-sub">compounded</div>' : 'TTM<div class="qhead-sub">sum</div>'}</th>`;
     html += '</tr></thead><tbody>';
     // Sort funds by latest non-null value descending (so most-active fund on top)
     const tickersOrdered = [...selected].map(t => {
@@ -463,7 +592,15 @@
       const swatch = colorByTicker[t]
         ? `<span style="display:inline-block;width:8px;height:8px;background:${colorByTicker[t]};border-radius:1px;margin-right:5px;vertical-align:0px;"></span>`
         : '';
-      html += `<tr><td class="row-label">${swatch}<a href="./fund.html?ticker=${t}" style="color:inherit;text-decoration:none;font-weight:600">${t}</a></td>`;
+      const u = universeByTicker[t] || {};
+      const fname = (u.legal_name || '').replace(/"/g, '&quot;');
+      const fmeta = [u.sponsor, u.strategy].filter(Boolean).join(' · ');
+      html += `<tr><td class="row-label" title="${fname}">`
+        + `<div>${swatch}<a href="./fund.html?ticker=${t}" style="color:inherit;text-decoration:none;font-weight:600">${t}</a>`
+        + (fmeta ? `<span class="fund-meta">${fmeta}</span>` : '')
+        + `</div>`
+        + (fname ? `<div class="fund-sub">${fname}</div>` : '')
+        + `</td>`;
       for (const lbl of labels) {
         const q = byLabel[lbl];
         const v = computeMetricValue(q, metric, isPct);

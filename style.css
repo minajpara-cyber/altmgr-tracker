@@ -453,6 +453,25 @@ table.qtable tbody td.row-label {
 table.qtable tbody tr:hover td:not(.row-label) { background: var(--row-hover); }
 table.qtable tbody tr:hover td.row-label { background: var(--accent-soft); }
 
+/* Compare table: fund name under the ticker + sponsor/strategy tag beside it */
+table.qtable tbody td.row-label .fund-sub {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-faint);
+  line-height: 1.25;
+  margin-top: 1px;
+  white-space: normal;
+  max-width: 250px;
+}
+table.qtable tbody td.row-label .fund-meta {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 7px;
+}
+
 table.qtable td.val { font-variant-numeric: tabular-nums; }
 table.qtable td.val.pos  { color: var(--text); }
 table.qtable td.val.neg  { color: var(--neg); }
