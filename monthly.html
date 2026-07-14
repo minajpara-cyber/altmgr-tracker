@@ -12,7 +12,7 @@
   .controls-row select { padding: 4px 8px; font-size: 13px; margin-left: 6px; min-width: 120px; }
   .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5; }
   .pill.strat-Credit { background: #1f5fa6; }
-  .pill.strat-RE     { background: #c47a00; }
+  .pill.strat-RE     { background: #955b00; }
   .pill.strat-PE     { background: #2c9f3a; }
   .pill.strat-Infra  { background: #7b3f99; }
   .chart-hint { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
@@ -114,9 +114,9 @@
 <script src="./app.js"></script>
 <script>
 (async function(){
-  paintRefreshDate();
   let data;
-  try { data = await loadData(); } catch { return; }
+  try { data = await loadData('./data-monthly.json'); } catch { return; }
+  paintRefreshDate(data);
 
   const monthly = data.monthly || [];
   const universe = data.universe || [];

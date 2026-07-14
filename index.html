@@ -25,6 +25,7 @@
 
 <main>
   <h1>Non-traded product universe</h1>
+  <p class="muted">Research dashboard for evergreen alternative-asset products, built from public SEC filings.</p>
   <div class="stat-row" id="stat-row">
     <div class="stat-card"><div class="label">Total NAV (latest)</div><div class="value" id="stat-nav">…</div><div class="sub" id="stat-nav-sub"></div></div>
     <div class="stat-card"><div class="label">Funds tracked</div><div class="value" id="stat-funds">…</div></div>
@@ -32,11 +33,17 @@
     <div class="stat-card"><div class="label">Latest filing</div><div class="value" id="stat-refresh">…</div></div>
   </div>
 
-  <h2>Funds</h2>
+  <h2>What changed</h2>
+  <div class="insight-grid" id="insight-grid" aria-live="polite"></div>
+
+  <h2 id="funds">Funds</h2>
   <div class="table-toolbar">
-    <input type="text" id="search" placeholder="filter by ticker, name, sponsor…">
-    <select id="strategy-filter"><option value="">All strategies</option></select>
-    <select id="sponsor-filter"><option value="">All sponsors</option></select>
+    <label class="field"><span>Search funds</span><input type="text" id="search" placeholder="Ticker, name, sponsor…"></label>
+    <label class="field"><span>Strategy</span><select id="strategy-filter"><option value="">All strategies</option></select></label>
+    <label class="field"><span>Sponsor</span><select id="sponsor-filter"><option value="">All sponsors</option></select></label>
+    <button class="btn" id="clear-filters" type="button">Clear</button>
+    <button class="btn" id="export-csv" type="button">Export CSV</button>
+    <span class="result-meta" id="result-meta"></span>
   </div>
   <div id="universe-table"></div>
 </main>
@@ -49,9 +56,9 @@
 <script src="./app.js"></script>
 <script>
 (async function() {
-  paintRefreshDate();
   let data;
   try { data = await loadData(); } catch { return; }
+  paintRefreshDate(data);
 
   const byTicker = groupQuartersByTicker(data.quarters || []);
   const sponsorSet = new Set();
@@ -75,7 +82,7 @@
     const navEop = (fundNav != null
         ? fundNav
         : (latest ? (latest.nav_eop ?? latest.total_net_assets_or_equity) : null));
-    const navTotal = navEop != null ? navEop + (dstNav || 0) : null;
+    const navTotal = effectiveNav(latest);
     if (navTotal != null) { totalNav += navTotal; totalNavCount++; }
     const iss = latest ? latest.issuance_total : null;
     const rep = latest ? latest.repurchases_total : null;
@@ -127,6 +134,21 @@
   document.getElementById('stat-sponsors').textContent = String(sponsorSet.size);
   document.getElementById('stat-refresh').textContent = fmtDate(data.data_through);
 
+  const present = rows.filter(r => r.latest_period);
+  const byFlow = [...present].filter(r => r.net_flow != null).sort((a,b) => b.net_flow - a.net_flow);
+  const byReturn = [...present].filter(r => r.latest_return != null).sort((a,b) => b.latest_return - a.latest_return);
+  const latestKey = Math.max(...present.map(r => quarterSortKey(r.latest_period)));
+  const staleCount = present.filter(r => latestKey - quarterSortKey(r.latest_period) >= 10).length;
+  const insightDefs = [
+    ['Largest inflow', byFlow[0] ? `${byFlow[0].ticker} ${fmtMSigned(byFlow[0].net_flow)}` : '—', byFlow[0] ? `${byFlow[0].latest_period} net capital activity` : 'No comparable flow data'],
+    ['Largest outflow', byFlow.length ? `${byFlow[byFlow.length-1].ticker} ${fmtMSigned(byFlow[byFlow.length-1].net_flow)}` : '—', byFlow.length ? `${byFlow[byFlow.length-1].latest_period} net capital activity` : 'No comparable flow data'],
+    ['Best latest return', byReturn[0] ? `${byReturn[0].ticker} ${fmtPctSigned(byReturn[0].latest_return)}` : '—', byReturn[0] ? `${byReturn[0].latest_period} · ${byReturn[0].return_src || 'best available'}` : 'No comparable return data'],
+    ['Coverage check', `${staleCount} stale fund${staleCount === 1 ? '' : 's'}`, `Latest represented period: ${present.sort((a,b) => quarterSortKey(b.latest_period)-quarterSortKey(a.latest_period))[0]?.latest_period || '—'}`],
+  ];
+  document.getElementById('insight-grid').innerHTML = insightDefs.map(([eyebrow, headline, detail]) =>
+    `<article class="insight-card"><div class="eyebrow">${eyebrow}</div><div class="headline">${headline}</div><div class="detail">${detail}</div></article>`
+  ).join('');
+
   // Populate filter dropdowns
   const stratSel = document.getElementById('strategy-filter');
   for (const s of [...strategySet].sort()) {
@@ -158,6 +180,8 @@
   const table = new Tabulator('#universe-table', {
     data: rows,
     layout: 'fitColumns',
+    responsiveLayout: 'collapse',
+    responsiveLayoutCollapseStartOpen: false,
     pagination: false,
     height: '70vh',
     initialSort: [{column: 'latest_return', dir: 'desc'}],
@@ -170,7 +194,7 @@
          const r = cell.getRow().getData();
          const name = cell.getValue() || '';
          if (r.category === 'Partnership') {
-           return `${name} <span style="font-size:10px;font-weight:700;color:#fff;background:#b8860b;padding:1px 5px;border-radius:8px;white-space:nowrap">PARTNERSHIP</span>`;
+           return `${name} <span style="font-size:10px;font-weight:700;color:#fff;background:#735600;padding:1px 5px;border-radius:8px;white-space:nowrap">PARTNERSHIP</span>`;
          }
          return name;
       }},
@@ -223,10 +247,30 @@
       )) return false;
       return true;
     });
+    const url = new URL(location.href);
+    const values = { q, strategy: strat, sponsor: sp };
+    for (const [key, value] of Object.entries(values)) value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
+    history.replaceState(null, '', url);
   }
   document.getElementById('search').addEventListener('input', applyFilter);
   stratSel.addEventListener('change', applyFilter);
   spSel.addEventListener('change', applyFilter);
+  table.on('dataFiltered', (_filters, filteredRows) => {
+    document.getElementById('result-meta').textContent = `${filteredRows.length} of ${rows.length} funds`;
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('search').value = '';
+    stratSel.value = '';
+    spSel.value = '';
+    applyFilter();
+  });
+  document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'alt-manager-universe.csv'));
+
+  const initialParams = new URLSearchParams(location.search);
+  document.getElementById('search').value = initialParams.get('q') || '';
+  stratSel.value = initialParams.get('strategy') || '';
+  spSel.value = initialParams.get('sponsor') || '';
+  table.on('tableBuilt', applyFilter);
 })();
 </script>
 </body>

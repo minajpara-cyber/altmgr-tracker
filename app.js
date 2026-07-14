@@ -1,6 +1,6 @@
 /* Alt-Manager Tracker — shared client code (quarterly redesign) */
 
-const DATA_URL = './data.json';
+const DATA_URL = './data-core.json';
 
 // ---------- formatters ----------
 // Money in $ MILLIONS only. Negatives parenthesized.
@@ -62,27 +62,33 @@ function signClass(v) {
 }
 
 // ---------- data loader ----------
-let DATA_CACHE = null;
-async function loadData() {
-  if (DATA_CACHE) return DATA_CACHE;
+const DATA_CACHE = new Map();
+async function loadData(url = DATA_URL) {
+  if (DATA_CACHE.has(url)) return DATA_CACHE.get(url);
   try {
-    const r = await fetch(DATA_URL);
+    const r = await fetch(url);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    DATA_CACHE = await r.json();
-    return DATA_CACHE;
+    const data = await r.json();
+    DATA_CACHE.set(url, data);
+    return data;
   } catch (e) {
     document.body.insertAdjacentHTML('afterbegin',
-      `<div class="error-msg">Failed to load data.json: ${e.message}. If you opened this from file:// directly, run a local server instead (cd site && python3 -m http.server 8000) or deploy to GitHub Pages.</div>`);
+      `<div class="error-msg">Failed to load ${url.replace('./', '')}: ${e.message}. If you opened this from file:// directly, run a local server instead.</div>`);
     throw e;
   }
 }
 
 // ---------- topbar refresh date ----------
-async function paintRefreshDate() {
+async function paintRefreshDate(providedData = null) {
   try {
-    const d = await loadData();
+    const d = providedData || await loadData();
     const el = document.getElementById('refresh-meta');
-    if (el) el.textContent = 'Data through ' + fmtDate(d.data_through);
+    if (!el) return;
+    const period = d.financial_period_through || d.data_through;
+    const refreshed = d.generated_at
+      ? new Date(d.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : null;
+    el.textContent = `Financials through ${fmtDate(period)}${refreshed ? ` · refreshed ${refreshed}` : ''}`;
   } catch { /* surfaced above */ }
 }
 
@@ -107,6 +113,88 @@ function groupQuartersByTicker(quarters) {
     arr.sort((a, b) => quarterSortKey(a.quarter_label) - quarterSortKey(b.quarter_label));
   }
   return m;
+}
+
+// One NAV definition used everywhere: manager-published Fund NAV for REITs,
+// otherwise period-end NAV/equity, plus any separately reported DST sleeve.
+function effectiveNav(q) {
+  if (!q) return null;
+  const main = q.fund_nav_usd != null ? q.fund_nav_usd
+    : q.nav_eop != null ? q.nav_eop
+    : q.total_net_assets_or_equity;
+  return main == null ? null : main + (q.dst_nav_usd || 0);
+}
+
+function latestQuarterRows(quarters) {
+  const grouped = groupQuartersByTicker(quarters || []);
+  return new Map([...grouped].map(([ticker, rows]) => [ticker, rows[rows.length - 1]]));
+}
+
+function downloadCsv(filename, rows) {
+  if (!rows || !rows.length) return;
+  const keys = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = Array.isArray(v) ? v.join('; ') : String(v);
+    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  };
+  const csv = [keys.join(','), ...rows.map(r => keys.map(k => esc(r[k])).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function enhanceSiteShell() {
+  if (!document.querySelector('link[rel="icon"]')) {
+    const icon = document.createElement('link');
+    icon.rel = 'icon';
+    icon.href = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#131313"/><path d="M14 46 27 16h9l14 30h-9l-3-8H25l-3 8zm14-15h8l-4-10z" fill="#d58a16"/></svg>');
+    document.head.appendChild(icon);
+  }
+  const header = document.querySelector('header.topbar');
+  if (!header) return;
+  const brand = header.querySelector('.brand');
+  if (brand && brand.tagName !== 'A') {
+    const home = document.createElement('a');
+    home.className = brand.className;
+    home.href = './index.html';
+    home.setAttribute('aria-label', 'Alt-Manager Tracker home');
+    home.innerHTML = brand.innerHTML;
+    brand.replaceWith(home);
+  }
+  const nav = header.querySelector('nav');
+  if (!nav) return;
+  nav.setAttribute('aria-label', 'Primary navigation');
+  for (const link of nav.querySelectorAll('a[href="./fund.html"]')) {
+    link.href = './index.html#funds';
+    link.textContent = 'Find fund';
+  }
+  if (!nav.querySelector('a[href="./methodology.html"]')) {
+    const method = document.createElement('a');
+    method.href = './methodology.html';
+    method.textContent = 'Methodology';
+    nav.appendChild(method);
+  }
+  const button = document.createElement('button');
+  button.className = 'nav-toggle';
+  button.type = 'button';
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-label', 'Open navigation');
+  button.textContent = 'Menu';
+  button.addEventListener('click', () => {
+    const open = header.classList.toggle('nav-open');
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? 'Close' : 'Menu';
+  });
+  header.insertBefore(button, nav);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', enhanceSiteShell);
+} else {
+  enhanceSiteShell();
 }
 
 function colorPalette(n) {

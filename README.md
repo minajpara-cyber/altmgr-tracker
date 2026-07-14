@@ -1,14 +1,14 @@
 # Alt-Manager Non-Traded Product Tracker
 
-A static, no-build website that visualizes SEC EDGAR financial data for 30
+A static, no-build website that visualizes SEC EDGAR financial data for 63
 non-traded alternative-asset products (BDCs, REITs, interval funds, etc.)
 sponsored by firms like Blackstone, Apollo, KKR, Ares, Blue Owl, Brookfield,
 Carlyle, TPG, and others.
 
 Built from the output of the `altmgr_inventory` Python extractors:
 
-- `output/master_combined.csv` — 420 filing-period rows, 39 columns
-- `output/universe_final.csv` — 31-fund sponsor / strategy / form-factor metadata
+- `output/quarterly_combined.csv` — normalized filing-period observations
+- `output/universe_final.csv` — sponsor / strategy / form-factor metadata
 
 ## Pages
 
@@ -17,6 +17,7 @@ Built from the output of the `altmgr_inventory` Python extractors:
   breakdown, and full underlying data table (CSV-exportable).
 - **Compare** (`compare.html`) — multi-fund chart with metric, time window, and
   sponsor / strategy quick-select filters.
+- **Methodology** (`methodology.html`) — definitions, source hierarchy, and limitations.
 
 ## Running locally
 
@@ -33,10 +34,20 @@ then open <http://localhost:8000/index.html>.
 After re-running the extractors:
 
 ```
+cd ~/Downloads/altmgr_inventory
 ~/Downloads/bdc_inventory/.venv/bin/python scripts/08_build_site.py
+cp site/data*.json ~/Downloads/altmgr-tracker/
 ```
 
-This regenerates `site/data.json`.
+This regenerates the full archive plus page-specific payloads: `data-core.json`,
+`data-monthly.json`, and `data-filings.json`. The site uses the smaller payload
+appropriate to each page.
+
+Validate a refresh before publishing:
+
+```
+node scripts/validate-data.mjs
+```
 
 ## Deployment
 

@@ -60,7 +60,16 @@
     <div class="stat-card"><div class="label">Cross-held GP funds</div><div class="value" id="stat-xh">…</div></div>
   </div>
 
-  <h2>Coverage &amp; entry pricing by fund</h2>
+  <nav class="range-row" aria-label="GP stakes sections" style="margin-bottom:18px">
+    <a class="chip" href="#coverage">Coverage</a>
+    <a class="chip" href="#value-creation">Value creation</a>
+    <a class="chip" href="#pricing">Entry pricing</a>
+    <a class="chip" href="#cross-held">Cross-held funds</a>
+    <a class="chip" href="#gp-exposure">GP exposure</a>
+    <a class="chip" href="#largest-positions">Largest positions</a>
+  </nav>
+
+  <h2 id="coverage">Coverage &amp; entry pricing by fund</h2>
   <p class="chart-hint">Median entry uplift uses clean first observations of
     secondary purchases only (acquired within ~13 months of the report).</p>
   <div id="tbl-funds" class="tbl"></div>
@@ -136,29 +145,32 @@
   <p class="chart-hint" id="pr-holder-note"></p>
   <div id="tbl-holder" class="tbl"></div>
 
-  <h2>Cross-held underlying GP funds</h2>
+  <h2 id="cross-held">Cross-held underlying GP funds</h2>
   <p class="chart-hint">The same underlying fund held by several of our
     vehicles. The multiple range compares holders' FV/cost at the latest
     semi-annual where 2+ holders disclose cost (multiples outside 0.2–10x
     excluded — near-zero residual cost after distributions is noise).</p>
   <div id="tbl-xh" class="tbl"></div>
 
-  <h2>GP family exposure</h2>
+  <h2 id="gp-exposure">GP family exposure</h2>
   <p class="chart-hint">Latest-period fair value across all 17 vehicles,
     rolled up to the sponsor family of the underlying fund.</p>
   <div id="tbl-gp" class="tbl"></div>
 
-  <h2>Largest positions</h2>
+  <h2 id="largest-positions">Largest positions</h2>
   <div id="tbl-top" class="tbl"></div>
 </main>
 
+<footer class="sitefoot">Position data is derived from public semiannual reports and N-PORT filings. Fair values are manager-reported marks. Not investment advice.</footer>
+
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="./app.js"></script>
 <script>
-const fmtM = v => v == null ? "" : "$" + (v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
-const fmtBn = v => v == null ? "" : "$" + (v / 1e9).toLocaleString(undefined, {maximumFractionDigits: 1}) + "bn";
-const fmtPct = v => v == null ? "" : (v * 100).toFixed(1) + "%";
-const fmtX = v => v == null ? "" : Number(v).toFixed(2) + "x";
+const fmtPositionM = v => v == null ? "" : "$" + (v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
+const fmtPositionBn = v => v == null ? "" : "$" + (v / 1e9).toLocaleString(undefined, {maximumFractionDigits: 1}) + "bn";
+const fmtPositionPct = v => v == null ? "" : (v * 100).toFixed(1) + "%";
+const fmtPositionX = v => v == null ? "" : Number(v).toFixed(2) + "x";
 
 fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   document.getElementById("refresh-meta").textContent =
@@ -166,7 +178,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   document.getElementById("stat-funds").textContent = d.stats.n_funds;
   document.getElementById("stat-pos").textContent =
     d.stats.n_positions_latest.toLocaleString();
-  document.getElementById("stat-fv").textContent = fmtBn(d.stats.fv_latest);
+  document.getElementById("stat-fv").textContent = fmtPositionBn(d.stats.fv_latest);
   document.getElementById("stat-xh").textContent =
     d.stats.n_cross_held.toLocaleString();
 
@@ -179,11 +191,11 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       {title: "As of", field: "latest_period", width: 105},
       {title: "Positions", field: "n_positions", sorter: "number", hozAlign: "right", width: 95},
       {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtM(c.getValue()), width: 110},
+       formatter: c => fmtPositionM(c.getValue()), width: 110},
       {title: "Median entry uplift", field: "median_entry_uplift", sorter: "number",
-       hozAlign: "right", formatter: c => fmtPct(c.getValue()), width: 150},
+       hozAlign: "right", formatter: c => fmtPositionPct(c.getValue()), width: 150},
       {title: "% marked up day one", field: "share_marked_up", sorter: "number",
-       hozAlign: "right", formatter: c => fmtPct(c.getValue()), width: 160},
+       hozAlign: "right", formatter: c => fmtPositionPct(c.getValue()), width: 160},
       {title: "Clean entries", field: "n_entry_clean_sec", sorter: "number",
        hozAlign: "right", width: 115},
       {title: "Cross-held", field: "n_cross_held", sorter: "number", hozAlign: "right",
@@ -200,13 +212,13 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       {title: "Held by", field: "holders", minWidth: 200,
        formatter: c => (c.getValue() || "").split("|").join(", ")},
       {title: "FV (latest)", field: "fv_latest", sorter: "number", hozAlign: "right",
-       formatter: c => fmtM(c.getValue()), width: 110},
+       formatter: c => fmtPositionM(c.getValue()), width: 110},
       {title: "Mult low", field: "mult_low", sorter: "number", hozAlign: "right",
-       formatter: c => fmtX(c.getValue()), width: 95},
+       formatter: c => fmtPositionX(c.getValue()), width: 95},
       {title: "Mult high", field: "mult_high", sorter: "number", hozAlign: "right",
-       formatter: c => fmtX(c.getValue()), width: 95},
+       formatter: c => fmtPositionX(c.getValue()), width: 95},
       {title: "Spread", field: "mult_spread", sorter: "number", hozAlign: "right",
-       formatter: c => fmtX(c.getValue()), width: 90},
+       formatter: c => fmtPositionX(c.getValue()), width: 90},
       {title: "As of", field: "mult_period", width: 105},
     ],
   });
@@ -216,7 +228,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     columns: [
       {title: "GP family", field: "family", minWidth: 220},
       {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtM(c.getValue()), width: 130},
+       formatter: c => fmtPositionM(c.getValue()), width: 130},
       {title: "Underlying funds", field: "n_funds", sorter: "number", hozAlign: "right",
        width: 140},
       {title: "Our holders", field: "n_holders", sorter: "number", hozAlign: "right",
@@ -231,19 +243,19 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       {title: "GP family", field: "gp_family", width: 170},
       {title: "Held by", field: "ticker", width: 100},
       {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtM(c.getValue()), width: 120},
+       formatter: c => fmtPositionM(c.getValue()), width: 120},
       {title: "FV / cost", field: "multiple", sorter: "number", hozAlign: "right",
-       formatter: c => fmtX(c.getValue()), width: 100},
+       formatter: c => fmtPositionX(c.getValue()), width: 100},
     ],
   });
 
   // ================= shared helpers for the analytics sections =============
   const labelByTicker = {};
   (d.by_fund || []).forEach(f => { labelByTicker[f.ticker] = f.label; });
-  // signed $m (fmtM renders "$-12m" for negatives)
+  // signed $m (fmtPositionM renders "$-12m" for negatives)
   const fmtSM = v => v == null ? "" : (v < 0 ? "−" : "") + "$" +
     Math.abs(v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
-  const fmtMoney = v => v == null ? "—" : (Math.abs(v) >= 995e6 ? fmtBn(v) : fmtM(v));
+  const fmtMoney = v => v == null ? "—" : (Math.abs(v) >= 995e6 ? fmtPositionBn(v) : fmtPositionM(v));
 
   // ================= value creation =========================================
   const vc = d.value_creation || {periods: [], cumulative: []};
@@ -417,7 +429,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   if (pr.meta) {
     document.getElementById("pr-intro").innerHTML +=
       " Sample: <b>" + pr.meta.n_total.toLocaleString() + "</b> clean secondary entries; " +
-      "overall median <b>" + fmtPct(pr.meta.median) + " of NAV</b> (" + fmtPct(pr.meta.median_adj) +
+      "overall median <b>" + fmtPositionPct(pr.meta.median) + " of NAV</b> (" + fmtPositionPct(pr.meta.median_adj) +
       " after backing NAV drift out of the median " + pr.meta.median_lag_days + "-day lag).";
   }
 
@@ -460,13 +472,13 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         tooltip: {callbacks: {
           label: c => {
             const r = c.dataset._rows[c.dataIndex];
-            return r ? c.dataset.label + ": median " + fmtPct(r.median) +
+            return r ? c.dataset.label + ": median " + fmtPositionPct(r.median) +
               " (n=" + r.n + (r.n < 10 ? " — small sample" : "") + ")" : null;
           },
           afterLabel: c => {
             const r = c.dataset._rows[c.dataIndex];
-            return r ? "    p25–p75 " + fmtPct(r.p25) + "–" + fmtPct(r.p75) +
-              ", $-weighted " + fmtPct(r.wavg) : null;
+            return r ? "    p25–p75 " + fmtPositionPct(r.p25) + "–" + fmtPositionPct(r.p75) +
+              ", $-weighted " + fmtPositionPct(r.wavg) : null;
           },
         }},
       },
@@ -484,8 +496,8 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     "half-year — indicative only (the sample is concentrated 2023H2 onward).";
   if (dt.gp_led && dt.lp_stake) {
     prNote += " GP-led continuation vehicles price closer to NAV: median " +
-      fmtPct(dt.gp_led.median) + " (n=" + dt.gp_led.n + ") vs " +
-      fmtPct(dt.lp_stake.median) + " for LP stakes (n=" + dt.lp_stake.n.toLocaleString() + ").";
+      fmtPositionPct(dt.gp_led.median) + " (n=" + dt.gp_led.n + ") vs " +
+      fmtPositionPct(dt.lp_stake.median) + " for LP stakes (n=" + dt.lp_stake.n.toLocaleString() + ").";
   }
   document.getElementById("pr-note").textContent = prNote;
 
@@ -497,9 +509,9 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       {title: "GP family", field: "family", minWidth: 180},
       {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 75},
       {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPct(c.getValue()), width: 175},
+       formatter: c => fmtPositionPct(c.getValue()), width: 175},
       {title: "Latest-half median", field: "latest_median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPct(c.getValue()), width: 150},
+       formatter: c => fmtPositionPct(c.getValue()), width: 150},
       {title: "Held by", field: "holders", minWidth: 220,
        formatter: c => (c.getValue() || []).join(", ")},
     ],
@@ -589,9 +601,9 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         {title: "Holder", field: "holder", width: 90},
         {title: "Acquired", field: "acq", width: 100},
         {title: "Price (% NAV)", field: "price", sorter: "number", hozAlign: "right",
-         formatter: c => fmtPct(c.getValue()), width: 120},
+         formatter: c => fmtPositionPct(c.getValue()), width: 120},
         {title: "Entry FV", field: "fv", sorter: "number", hozAlign: "right",
-         formatter: c => fmtM(c.getValue()), width: 100},
+         formatter: c => fmtPositionM(c.getValue()), width: 100},
       ],
     });
   }
@@ -610,7 +622,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       {title: "Fund", field: "label", minWidth: 220},
       {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 80},
       {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPct(c.getValue()), width: 180},
+       formatter: c => fmtPositionPct(c.getValue()), width: 180},
     ],
   });
 });
