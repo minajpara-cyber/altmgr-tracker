@@ -5,7 +5,7 @@
 <title>GP Stakes — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=20260714-1">
 <style>
   .chart-hint { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
   .tbl { margin-bottom: 26px; }
@@ -165,7 +165,7 @@
 
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="./app.js"></script>
+<script src="./app.js?v=20260714-1"></script>
 <script>
 const fmtPositionM = v => v == null ? "" : "$" + (v / 1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + "m";
 const fmtPositionBn = v => v == null ? "" : "$" + (v / 1e9).toLocaleString(undefined, {maximumFractionDigits: 1}) + "bn";
