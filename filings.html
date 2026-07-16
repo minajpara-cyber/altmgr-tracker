@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>Filings — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=20260714-1">
 </head>
 <body>
 <header class="topbar">
@@ -38,16 +39,16 @@
   </div>
 
   <div class="table-toolbar">
-    <input type="text" id="search" placeholder="filter by ticker, fund name, sponsor, form…">
-    <select id="form-filter"><option value="">All form types</option></select>
-    <select id="sponsor-filter"><option value="">All sponsors</option></select>
-    <select id="range-filter">
+    <label class="field"><span>Search filings</span><input type="text" id="search" placeholder="Ticker, fund, sponsor, form…"></label>
+    <label class="field"><span>Form</span><select id="form-filter"><option value="">All form types</option></select></label>
+    <label class="field"><span>Sponsor</span><select id="sponsor-filter"><option value="">All sponsors</option></select></label>
+    <label class="field"><span>Date range</span><select id="range-filter">
       <option value="">All time</option>
       <option value="7">Last 7 days</option>
       <option value="30">Last 30 days</option>
       <option value="90">Last 90 days</option>
       <option value="365">Last 12 months</option>
-    </select>
+    </select></label>
   </div>
   <div id="filings-table"></div>
 </main>
@@ -57,12 +58,12 @@
 </footer>
 
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
-<script src="./app.js"></script>
+<script src="./app.js?v=20260714-1"></script>
 <script>
 (async function() {
-  paintRefreshDate();
   let data;
-  try { data = await loadData(); } catch { return; }
+  try { data = await loadData('./data-filings.json'); } catch { return; }
+  paintRefreshDate(data);
 
   const filings = data.filings || [];
   const today = new Date();
@@ -94,6 +95,8 @@
   const table = new Tabulator('#filings-table', {
     data: filings,
     layout: 'fitColumns',
+    responsiveLayout: 'collapse',
+    responsiveLayoutCollapseStartOpen: false,
     pagination: 'local',
     paginationSize: 50,
     paginationSizeSelector: [25, 50, 100, 250],
@@ -123,7 +126,7 @@
        formatter: function(cell) {
          const url = cell.getValue();
          if (!url) return '';
-         return `<a href="${url}" target="_blank" rel="noopener" style="color:#5fb3ff">SEC →</a>`;
+         return `<a href="${url}" target="_blank" rel="noopener">SEC →</a>`;
        }},
     ],
   });

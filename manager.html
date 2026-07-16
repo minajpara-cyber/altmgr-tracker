@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>Manager — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=20260714-1">
 <style>
   .strat-badges { display: inline-flex; gap: 4px; flex-wrap: wrap; }
   .strat-badge {
@@ -13,7 +14,7 @@
     font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5;
   }
   .strat-Credit { background: #1f5fa6; }
-  .strat-RE     { background: #c47a00; }
+  .strat-RE     { background: #955b00; }
   .strat-PE     { background: #2c9f3a; }
   .strat-Infra  { background: #7b3f99; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
@@ -44,13 +45,13 @@
   <div class="stat-row" id="stat-row">
     <div class="stat-card"><div class="label">Managers tracked</div><div class="value" id="stat-mgrs">…</div></div>
     <div class="stat-card"><div class="label">Largest manager</div><div class="value" id="stat-largest">…</div><div class="sub" id="stat-largest-sub"></div></div>
-    <div class="stat-card"><div class="label">Total non-traded AUM</div><div class="value" id="stat-total">…</div><div class="sub" id="stat-total-sub"></div></div>
+    <div class="stat-card"><div class="label">Core manager AUM</div><div class="value" id="stat-total">…</div><div class="sub" id="stat-total-sub"></div></div>
     <div class="stat-card"><div class="label">Data through</div><div class="value" id="stat-refresh">…</div></div>
   </div>
 
   <h2>Managers</h2>
   <div class="table-toolbar">
-    <input type="text" id="search" placeholder="filter by manager or strategy…">
+    <label class="field"><span>Search managers</span><input type="text" id="search" placeholder="Manager or strategy…"></label>
   </div>
   <div id="manager-table"></div>
 
@@ -100,28 +101,18 @@
 
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="./app.js"></script>
+<script src="./app.js?v=20260714-1"></script>
 <script>
 (async function(){
-  paintRefreshDate();
   let data;
   try { data = await loadData(); } catch { return; }
+  paintRefreshDate(data);
 
   // -- "Effective" AUM for a fund-quarter row.
   // For REITs we prefer the manager-published fair-value Fund NAV (mirrors
   // the Universe page). For everything else, nav_eop already reflects fair
   // value. Ares REITs also have a DST sleeve added on top.
-  function navOf(q) {
-    if (!q) return null;
-    // Prefer fair-value Fund NAV (REITs); else nav_eop (change-statement);
-    // else total_net_assets_or_equity (balance-sheet), which fills gaps for
-    // multi-tier LP perpetuals whose nav_eop the aggregator misses.
-    const main = (q.fund_nav_usd != null) ? q.fund_nav_usd
-               : (q.nav_eop != null)      ? q.nav_eop
-               : q.total_net_assets_or_equity;
-    if (main == null) return null;
-    return main + (q.dst_nav_usd || 0);
-  }
+  const navOf = effectiveNav;
 
   const universe = data.universe || [];
   const quarters = data.quarters || [];
@@ -142,10 +133,11 @@
     tToName.set(u.ticker, u.legal_name || u.ticker);
   }
 
-  // Semi-annual funds (Partners Group SICAVs/Trust) emit "H1/FY" rows; for
-  // point-in-time AUM series their period-END level belongs in the matching
-  // calendar quarter bucket (Jun-30 -> Q2, Dec-31 -> Q4) so the manager time
-  // series doesn't grow fake "FY 2025" x-axis points.
+  // All quarter labels seen, sorted chronologically.
+  // Semi-annual funds (PG SICAVs/Trust, template F) emit H/FY rows; their
+  // period-END levels belong in the matching calendar quarter bucket
+  // (Jun-30 -> Q2, Dec-31 -> Q4) so the AUM time series gets no fake
+  // "FY 2025" x-axis points.
   function aumBucket(q) {
     if (q.period_type === 'H' || q.period_type === 'FY') {
       const y = (q.quarter_end || '').slice(0, 4);
@@ -155,7 +147,6 @@
     return q.quarter_label;
   }
 
-  // All quarter labels seen, sorted chronologically.
   const allQ = [...new Set(quarters.map(q => aumBucket(q)).filter(Boolean))]
     .sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
 
@@ -168,14 +159,13 @@
     if (!sp) continue;
     const aum = navOf(q);
     if (aum == null) continue;
-    const qb = aumBucket(q);
     if (!aumByMgr.has(sp)) aumByMgr.set(sp, new Map());
     const m = aumByMgr.get(sp);
-    m.set(qb, (m.get(qb) || 0) + aum);
+    m.set(aumBucket(q), (m.get(aumBucket(q)) || 0) + aum);
     if (!aumByTicker.has(sp)) aumByTicker.set(sp, new Map());
     const tm = aumByTicker.get(sp);
     if (!tm.has(q.ticker)) tm.set(q.ticker, new Map());
-    tm.get(q.ticker).set(qb, aum);
+    tm.get(q.ticker).set(aumBucket(q), aum);
   }
 
   // Sponsor -> Set(strategies), Set(tickers)
@@ -207,55 +197,46 @@
   for (const sp of sponsors) {
     const m = aumByMgr.get(sp) || new Map();
     const qLabels = [...m.keys()].sort((a,b) => quarterSortKey(a) - quarterSortKey(b));
-    const lastQ = qLabels[qLabels.length - 1];
-    const prevQ = qLabels.length >= 2 ? qLabels[qLabels.length - 2] : null;
-    // QoQ on a carry-forward basis: semi-annual funds have no row in most
-    // quarter buckets, so comparing raw bucket sums would show the whole
-    // SICAV block appearing/vanishing as a fake ±50% swing.
-    const tmSp = aumByTicker.get(sp) || new Map();
-    function aumAt(label) {
-      const key = quarterSortKey(label);
-      let s = 0;
-      for (const [, qm] of tmSp) {
-        let best = null, bestKey = -1;
-        for (const [ql, v] of qm) {
-          const k = quarterSortKey(ql);
-          if (k <= key && k > bestKey) { bestKey = k; best = v; }
-        }
-        if (best != null) s += best;
-      }
-      return s || null;
-    }
-    const prev = prevQ ? aumAt(prevQ) : null;
-    const qoq  = (lastQ && prev) ? ((aumAt(lastQ) || 0) / prev - 1) : null;
+    let lastQ = qLabels[qLabels.length - 1];
+    let aum = null, prev = null, qoq = null;
 
     // AUM-weighted returns (per-metric denominators so a missing fund metric
-    // doesn't drag the average down). Headline AUM = latest-REPORTED NAV per
-    // fund summed (carry-forward): semi-annual reporters (PG SICAVs/Trust)
-    // lag the quarterly cohort by up to two quarters and would otherwise
-    // drop out of the bucket sum entirely.
+    // doesn't drag the average down).
     let qN=0,qD=0, yN=0,yD=0, tN=0,tD=0;
     let netFlowYTD = 0;
-    let aum = 0;
     const tickers = [...(fundsBy.get(sp) || [])];
+    // Headline AUM uses each fund's own latest observation, matching Universe.
+    // A common-quarter sum silently dropped funds with a different filing cadence.
+    let latestSum = 0, previousSum = 0, latestCount = 0, previousCount = 0;
+    const latestLabels = [];
+    for (const t of tickers) {
+      const history = sortedQByTicker.get(t) || [];
+      const last = history[history.length - 1];
+      const prior = history[history.length - 2];
+      const lastNav = navOf(last), priorNav = navOf(prior);
+      if (lastNav != null) { latestSum += lastNav; latestCount++; latestLabels.push(last.quarter_label); }
+      if (priorNav != null) { previousSum += priorNav; previousCount++; }
+    }
+    aum = latestCount ? latestSum : null;
+    prev = previousCount === latestCount && previousCount ? previousSum : null;
+    qoq = (aum != null && prev) ? (aum / prev - 1) : null;
+    if (latestLabels.length) lastQ = latestLabels.sort((a,b) => quarterSortKey(a)-quarterSortKey(b)).at(-1);
     const latestYear = lastQ ? parseInt(lastQ.split(' ').pop(), 10) : null;
     for (const t of tickers) {
       const latest = latestByTicker.get(t);
       const w = latest ? navOf(latest) : 0;
       if (!w) continue;
-      aum += w;
       const s = summary[t] || {};
       if (s.latest_return != null) { qN += s.latest_return * w; qD += w; }
       if (s.ytd_return    != null) { yN += s.ytd_return    * w; yD += w; }
       if (s.ttm_return    != null) { tN += s.ttm_return    * w; tD += w; }
       // YTD net flow = Σ across this ticker's current-calendar-year quarters
       // of (issuance + DRIP − |repurchases|). DST proceeds/redemptions are
-      // counted for REITs that report them. Semi-annual funds emit BOTH an
-      // H1 and an FY row per year — the FY row contains H1, so skip H rows
-      // for years where an FY row exists (same de-overlap rule as the
-      // summary metrics in 08_build_site).
+      // counted for REITs that report them.
       if (latestYear) {
         const rowsT = sortedQByTicker.get(t) || [];
+        // Semi-annual funds emit BOTH an H1 and an FY row per year; the FY
+        // row already contains H1, so skip H rows where an FY row exists.
         const fyYears = new Set(rowsT.filter(q => q.period_type === 'FY')
           .map(q => parseInt((q.quarter_label || '').split(' ').pop(), 10)));
         for (const q of rowsT) {
@@ -270,7 +251,6 @@
         }
       }
     }
-    if (!aum) aum = null;
 
     if (aum) grandAum += aum;
     rows.push({
@@ -294,8 +274,8 @@
   document.getElementById('stat-largest').textContent  = top ? top.sponsor : '—';
   document.getElementById('stat-largest-sub').textContent = top ? fmtM(top.aum) : '';
   document.getElementById('stat-total').textContent    = fmtM(grandAum);
-  document.getElementById('stat-total-sub').textContent= `across ${universe.length} funds`;
-  document.getElementById('stat-refresh').textContent  = fmtDate(data.data_through);
+  document.getElementById('stat-total-sub').textContent= `across ${coreUniverse.length} directly managed funds · partnerships excluded`;
+  document.getElementById('stat-refresh').textContent  = fmtDate(data.financial_period_through || data.data_through);
 
   // ---- Manager table ----
   const moneyCell = (cell) => fmtM(cell.getValue());
@@ -323,6 +303,8 @@
   const table = new Tabulator('#manager-table', {
     data: rows,
     layout: 'fitColumns',
+    responsiveLayout: 'collapse',
+    responsiveLayoutCollapseStartOpen: false,
     pagination: false,
     height: '50vh',
     selectable: 1,
@@ -429,11 +411,12 @@
     const m = METRICS[metricKey];
     const out = new Map();
     for (const q of quarters) {
-      // Quarterly time-series charts: skip semi-annual (H/FY) rows — a
-      // 6/12-month aggregate plotted as one "quarter" would distort flow
-      // and return series. The snapshot table above still includes these
-      // funds via latest-reported carry-forward.
-      if (q.period_type === 'H' || q.period_type === 'FY') continue;
+      // Semi-annual (H/FY) rows: AUM is a point-in-time LEVEL, so it joins
+      // the series in its calendar-quarter bucket; 6/12-month flow, income
+      // and return aggregates would distort a quarterly series, so every
+      // other metric skips these rows.
+      const isHFY = q.period_type === 'H' || q.period_type === 'FY';
+      if (isHFY && metricKey !== 'aum') continue;
       const key = grouperFn(q);
       if (!key) continue;
       const raw = m.perQuarter(q);
@@ -442,11 +425,13 @@
       const inner = out.get(key);
       if (m.weighted) {
         const { val, weight } = raw;
-        const cur = inner.get(q.quarter_label) || { num: 0, den: 0 };
+        const qlbl = aumBucket(q);
+        const cur = inner.get(qlbl) || { num: 0, den: 0 };
         cur.num += val * weight; cur.den += weight;
-        inner.set(q.quarter_label, cur);
+        inner.set(qlbl, cur);
       } else {
-        inner.set(q.quarter_label, (inner.get(q.quarter_label) || 0) + raw);
+        const qlbl = aumBucket(q);
+        inner.set(qlbl, (inner.get(qlbl) || 0) + raw);
       }
     }
     if (m.weighted) {

@@ -26,7 +26,7 @@ time. **Replace `YOUR-USERNAME`** with your GitHub username.
 ```
 cd ~/Downloads/altmgr_inventory/site
 git init -b main
-git add index.html fund.html compare.html style.css app.js data.json README.md DEPLOY.md
+git add *.html style.css app.js data*.json secondaries.json README.md DEPLOY.md
 git commit -m "Initial site"
 git remote add origin https://github.com/YOUR-USERNAME/altmgr-tracker.git
 git push -u origin main
@@ -66,8 +66,9 @@ After re-running the extractors and rebuilding `data.json`:
 ```
 cd ~/Downloads/altmgr_inventory
 ~/Downloads/bdc_inventory/.venv/bin/python scripts/08_build_site.py
-cd site
-git add data.json
+cp site/data*.json ~/Downloads/altmgr-tracker/
+cd ~/Downloads/altmgr-tracker
+git add data*.json
 git commit -m "Refresh data"
 git push
 ```
