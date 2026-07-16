@@ -123,7 +123,17 @@
         Latest ${(universe.cik || '').trim() ? 'filing' : 'report'}: ${fmtDate(latest.filing_date)} (${latest.source_form}) ·
         ${(universe.cik || '').trim()
           ? `CIK ${cikPadded} · <a href="${edgarUrl}" target="_blank" rel="noopener">SEC EDGAR &rarr;</a>`
-          : `non-SEC — public reports via <a href="https://www.partnersgroup.com" target="_blank" rel="noopener">partnersgroup.com &rarr;</a>`}
+          : (() => {
+              const SRC = { PGHN: ['partnersgroup.com', 'https://www.partnersgroup.com'],
+                            BX: { ECRED_LX: ['ecred.com', 'https://www.ecred.com/resources/'],
+                                  BEPIF: ['bepif.com', 'https://www.bepif.com/shareholders/'],
+                                  BXPE_LX: ['bxpef.com', 'https://www.bxpef.com/information/'] } };
+              let src = SRC[universe.sponsor];
+              if (src && !Array.isArray(src)) src = src[ticker];
+              return src
+                ? `non-SEC — public reports via <a href="${src[1]}" target="_blank" rel="noopener">${src[0]} &rarr;</a>`
+                : 'non-SEC — public fund reports';
+            })()}
       </div>
     </div>
 

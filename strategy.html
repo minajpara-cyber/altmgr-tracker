@@ -113,8 +113,25 @@
   // Effective AUM for a fund-quarter (mirrors manager.html / index.html).
   const navOf = effectiveNav;
 
-  const universe = data.universe || [];
-  const quarters = data.quarters || [];
+  // International (non-SEC, template F) include/exclude toggle. Default ON.
+  const includeIntl = new URLSearchParams(location.search).get('intl') !== '0';
+  {
+    const bar = document.querySelector('main h1');
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:13px;font-weight:400;margin-left:18px;vertical-align:middle;';
+    lbl.innerHTML = `<input type="checkbox" id="intl-toggle" ${includeIntl ? 'checked' : ''}> include international (non-SEC) funds`;
+    if (bar) bar.appendChild(lbl);
+    document.getElementById('intl-toggle').addEventListener('change', (e) => {
+      const u = new URL(location.href);
+      if (e.target.checked) u.searchParams.delete('intl'); else u.searchParams.set('intl', '0');
+      location.href = u.toString();
+    });
+  }
+  const intlTickers = new Set((data.universe || [])
+    .filter(u => !(u.cik && String(u.cik).trim())).map(u => u.ticker));
+  const universe = (data.universe || [])
+    .filter(u => includeIntl || !intlTickers.has(u.ticker));
+  const quarters = (data.quarters || []).filter(q => includeIntl || !intlTickers.has(q.ticker));
   const summary = data.summary_by_ticker || {};
 
   const tToSponsor = new Map();

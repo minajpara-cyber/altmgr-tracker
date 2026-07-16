@@ -40,6 +40,11 @@
   <h2 id="funds">Funds</h2>
   <div class="table-toolbar">
     <label class="field"><span>Search funds</span><input type="text" id="search" placeholder="Ticker, name, sponsor…"></label>
+    <label class="field"><span>Region</span><select id="region-filter">
+      <option value="">All regions</option>
+      <option value="us">US (SEC filers)</option>
+      <option value="intl">International (non-SEC)</option>
+    </select></label>
     <label class="field"><span>Strategy</span><select id="strategy-filter"><option value="">All strategies</option></select></label>
     <label class="field"><span>Sponsor</span><select id="sponsor-filter"><option value="">All sponsors</option></select></label>
     <button class="btn" id="clear-filters" type="button">Clear</button>
@@ -109,6 +114,7 @@
       sponsor: u.sponsor,
       strategy: u.strategy,
       category: u.category || 'Core',
+      intl: !(u.cik && String(u.cik).trim()),
       form_factor: u.form_factor,
       latest_period: latest ? latest.quarter_label : null,
       latest_form: latest ? latest.source_form : null,
@@ -236,7 +242,11 @@
     const q = (document.getElementById('search').value || '').toLowerCase().trim();
     const strat = stratSel.value;
     const sp = spSel.value;
+    const regionSel = document.getElementById('region-filter');
+    const region = regionSel ? regionSel.value : '';
     table.setFilter((row) => {
+      if (region === 'us' && row.intl) return false;
+      if (region === 'intl' && !row.intl) return false;
       if (strat && row.strategy !== strat) return false;
       if (sp && row.sponsor !== sp) return false;
       if (q && !(
@@ -256,6 +266,9 @@
   document.getElementById('search').addEventListener('input', applyFilter);
   stratSel.addEventListener('change', applyFilter);
   spSel.addEventListener('change', applyFilter);
+  document.getElementById('region-filter').addEventListener('change', applyFilter);
+  const _cf = document.getElementById('clear-filters');
+  if (_cf) _cf.addEventListener('click', () => { const r = document.getElementById('region-filter'); if (r) r.value = ''; applyFilter(); });
   table.on('dataFiltered', (_filters, filteredRows) => {
     document.getElementById('result-meta').textContent = `${filteredRows.length} of ${rows.length} funds`;
   });
