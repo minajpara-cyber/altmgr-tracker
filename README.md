@@ -1,14 +1,14 @@
 # Alt-Manager Non-Traded Product Tracker
 
-A static, no-build website that visualizes SEC EDGAR financial data for 63
+A static, no-build website that visualizes SEC EDGAR financial data for 30
 non-traded alternative-asset products (BDCs, REITs, interval funds, etc.)
 sponsored by firms like Blackstone, Apollo, KKR, Ares, Blue Owl, Brookfield,
 Carlyle, TPG, and others.
 
 Built from the output of the `altmgr_inventory` Python extractors:
 
-- `output/quarterly_combined.csv` — normalized filing-period observations
-- `output/universe_final.csv` — sponsor / strategy / form-factor metadata
+- `output/master_combined.csv` — 420 filing-period rows, 39 columns
+- `output/universe_final.csv` — 31-fund sponsor / strategy / form-factor metadata
 
 ## Pages
 
@@ -17,7 +17,13 @@ Built from the output of the `altmgr_inventory` Python extractors:
   breakdown, and full underlying data table (CSV-exportable).
 - **Compare** (`compare.html`) — multi-fund chart with metric, time window, and
   sponsor / strategy quick-select filters.
-- **Methodology** (`methodology.html`) — definitions, source hierarchy, and limitations.
+
+Non-SEC coverage: Partners Group's non-US evergreens (Lux SICAVs + the
+Guernsey Partners Fund Trust) are extracted from their public annual /
+semi-annual reports on partnersgroup.com (template F, scripts/25) and flow
+through the same master/quarterly pipeline as the SEC filers — they appear
+in every page like any other fund, in USD (PGGV translated at period-end
+ECB rates), at H1/FY cadence.
 
 ## Running locally
 
@@ -34,20 +40,10 @@ then open <http://localhost:8000/index.html>.
 After re-running the extractors:
 
 ```
-cd ~/Downloads/altmgr_inventory
 ~/Downloads/bdc_inventory/.venv/bin/python scripts/08_build_site.py
-cp site/data*.json ~/Downloads/altmgr-tracker/
 ```
 
-This regenerates the full archive plus page-specific payloads: `data-core.json`,
-`data-monthly.json`, and `data-filings.json`. The site uses the smaller payload
-appropriate to each page.
-
-Validate a refresh before publishing:
-
-```
-node scripts/validate-data.mjs
-```
+This regenerates `site/data.json`.
 
 ## Deployment
 

@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <title>Fund detail — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./style.css?v=20260714-1">
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <header class="topbar">
@@ -32,38 +31,27 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="./app.js?v=20260714-1"></script>
+<script src="./app.js"></script>
 <script>
 (async function() {
+  paintRefreshDate();
   const params = new URLSearchParams(location.search);
   const ticker = params.get('ticker');
   const root = document.getElementById('fund-root');
 
-  let data;
-  try { data = await loadData(); } catch { return; }
-  paintRefreshDate(data);
-
   if (!ticker) {
     root.className = '';
-    const options = [...data.universe].sort((a,b) => a.ticker.localeCompare(b.ticker))
-      .map(u => `<option value="${u.ticker}">${u.ticker} — ${u.legal_name} (${u.sponsor} · ${u.strategy})</option>`).join('');
-    root.innerHTML = `<div class="fund-header"><h1>Find a fund</h1><p class="muted">Choose any tracked vehicle to open its performance, flows, fees, and filing history.</p></div>
-      <form id="fund-picker" class="method-card" style="max-width:720px">
-        <label class="field"><span>Fund</span><select id="fund-select">${options}</select></label>
-        <button class="btn primary" type="submit" style="margin-top:10px">Open fund</button>
-      </form>`;
-    document.getElementById('fund-picker').addEventListener('submit', e => {
-      e.preventDefault();
-      location.href = `./fund.html?ticker=${encodeURIComponent(document.getElementById('fund-select').value)}`;
-    });
+    root.innerHTML = '<div class="error-msg">No ticker specified. Add <code>?ticker=BCRED</code> to the URL or pick a fund from the <a href="./index.html">Universe page</a>.</div>';
     return;
   }
+
+  let data;
+  try { data = await loadData(); } catch { return; }
   const universe = data.universe.find(u => u.ticker === ticker);
-  const quartersAll = (data.quarters || [])
+  const quartersAll = data.quarters || [];
+  const quarters = quartersAll
     .filter(q => q.ticker === ticker)
     .sort((a, b) => quarterSortKey(a.quarter_label) - quarterSortKey(b.quarter_label));
-  const periodView = params.get('periods') === 'all' ? 'all' : 'recent';
-  const quarters = periodView === 'all' ? quartersAll : quartersAll.slice(-12);
 
   if (!universe) {
     root.className = '';
@@ -80,11 +68,11 @@
     return;
   }
 
-  const latest = quartersAll[quartersAll.length - 1];
-  const first = quartersAll[0];
+  const latest = quarters[quarters.length - 1];
+  const first = quarters[0];
   const summary = (data.summary_by_ticker || {})[ticker] || {};
   // Most recent quarter that carries an effective management-fee rate.
-  const feeQ = [...quartersAll].reverse().find(q => q.mgmt_fee_rate_annual != null);
+  const feeQ = [...quarters].reverse().find(q => q.mgmt_fee_rate_annual != null);
   // Year-to-date label: parse year from latest quarter label
   const ytdYear = (latest.quarter_label || '').split(' ').pop() || '';
 
@@ -94,14 +82,7 @@
 
   // Period type: are we in Q-mode (BDC/REIT) or H/FY-mode (N-CSR)?
   // If all rows are H or FY, use the H/FY layout; otherwise Q layout.
-  const allHFY = quartersAll.every(q => q.period_type === 'H' || q.period_type === 'FY');
-
-  const RETURN_SOURCE_LABELS = {
-    fh_reported_return_class_i: 'Fund-reported Class I total return',
-    per_share_return_class_i: 'Derived Class I total return',
-    bridge_return_pct: 'NAV bridge return',
-    quarterly_return: 'N-PORT quarterly return',
-  };
+  const allHFY = quarters.every(q => q.period_type === 'H' || q.period_type === 'FY');
 
   // Latest net flow (subs - reps) and NAV
   const netFlow = ((latest.issuance_total || 0) + (latest.drip_total || 0))
@@ -120,36 +101,26 @@
         ${universe.status ? `<span class="pill">${universe.status}</span>` : ''}
       </div>
       <div class="links">
-        Latest filing: ${fmtDate(latest.filing_date)} (${latest.source_form}) ·
-        CIK ${cikPadded} ·
-        <a href="${edgarUrl}" target="_blank" rel="noopener">SEC EDGAR &rarr;</a>
+        Latest ${(universe.cik || '').trim() ? 'filing' : 'report'}: ${fmtDate(latest.filing_date)} (${latest.source_form}) ·
+        ${(universe.cik || '').trim()
+          ? `CIK ${cikPadded} · <a href="${edgarUrl}" target="_blank" rel="noopener">SEC EDGAR &rarr;</a>`
+          : `non-SEC — public reports via <a href="https://www.partnersgroup.com" target="_blank" rel="noopener">partnersgroup.com &rarr;</a>`}
       </div>
     </div>
 
     <div class="stat-row">
       <div class="stat-card"><div class="label">Latest NAV</div><div class="value">${fmtM(latest.fund_nav_usd != null ? latest.fund_nav_usd : latest.nav_eop)}${latest.dst_nav_usd ? ` <span style="font-size:12px;color:var(--muted)">(+${fmtM(latest.dst_nav_usd)} DST)</span>` : ''}</div><div class="sub">${latest.quarter_label}${latest.fund_nav_usd != null ? ' · Fund NAV' : ''}</div></div>
       <div class="stat-card"><div class="label">Mgmt fee rate (ann.)</div><div class="value">${feeQ ? (feeQ.mgmt_fee_rate_annual*100).toFixed(2)+'%' : '—'}</div><div class="sub">${feeQ ? feeQ.quarter_label + ' · on ' + fmtM(feeQ.fee_base_usd) + ' base' : 'no fee disclosed'}</div></div>
-      <div class="stat-card"><div class="label">Quarter return</div><div class="value ${signClass(summary.latest_return)}">${fmtPctSigned(summary.latest_return)}</div><div class="sub">${RETURN_SOURCE_LABELS[summary.latest_return_src] || summary.latest_return_src || '—'}</div></div>
+      <div class="stat-card"><div class="label">Quarter return</div><div class="value ${signClass(summary.latest_return)}">${fmtPctSigned(summary.latest_return)}</div><div class="sub">${summary.latest_return_src || '—'}</div></div>
       <div class="stat-card"><div class="label">YTD return</div><div class="value ${signClass(summary.ytd_return)}">${fmtPctSigned(summary.ytd_return)}</div><div class="sub">${ytdYear} so far</div></div>
       <div class="stat-card"><div class="label">Trailing 12 mo</div><div class="value ${signClass(summary.ttm_return)}">${fmtPctSigned(summary.ttm_return)}</div><div class="sub">last 4 quarters</div></div>
       <div class="stat-card"><div class="label">Trailing 3 yr</div><div class="value ${signClass(summary.y3_return)}">${fmtPctSigned(summary.y3_return)}</div><div class="sub">last 12 qtrs, cumulative</div></div>
-      <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quartersAll.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
+      <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quarters.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
     </div>
 
     <h2 class="section-title">Performance over time</h2>
     <div class="chart-wrap" style="height:280px;"><canvas id="perfChart"></canvas></div>
     <h2 class="section-title">Quarterly detail</h2>
-    <div class="table-toolbar">
-      <span class="control-label">History</span>
-      <button class="btn ${periodView === 'recent' ? 'primary' : ''}" id="period-recent" type="button">Recent 12</button>
-      <button class="btn ${periodView === 'all' ? 'primary' : ''}" id="period-all" type="button">All periods</button>
-      <span class="control-label">Section</span>
-      <button class="chip active" type="button" data-section-filter="all">All</button>
-      <button class="chip" type="button" data-section-filter="performance">Performance</button>
-      <button class="chip" type="button" data-section-filter="nav">NAV</button>
-      <button class="chip" type="button" data-section-filter="flows">Flows</button>
-      <button class="chip" type="button" data-section-filter="fees-fee-economics">Fees</button>
-    </div>
     <div class="legend">
       <span class="legend-chip"><span class="dot legend-q"></span>Q = 10-Q quarterly</span>
       <span class="legend-chip"><span class="dot legend-derived"></span>derived Q4 = computed from 10-K minus Q1+Q2+Q3</span>
@@ -293,10 +264,9 @@
 
   const allSections = PER_SHARE_SECTION ? SECTIONS.concat([PER_SHARE_SECTION]) : SECTIONS;
   for (const section of allSections) {
-    const sectionSlug = section.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    html += `<tr class="section-row" data-section="${sectionSlug}"><td colspan="${quarters.length + 1}">${section.name}</td></tr>`;
+    html += `<tr class="section-row"><td colspan="${quarters.length + 1}">${section.name}</td></tr>`;
     for (const row of section.rows) {
-      html += `<tr class="metric-row" data-section="${sectionSlug}"><td class="row-label">${row.label}</td>`;
+      html += `<tr><td class="row-label">${row.label}</td>`;
       for (let qi = 0; qi < quarters.length; qi++) {
         const q = quarters[qi];
         let v;
@@ -375,21 +345,6 @@
   }
   html += '</tbody>';
   table.innerHTML = html;
-
-  function setPeriodView(view) {
-    const next = new URL(location.href);
-    view === 'all' ? next.searchParams.set('periods', 'all') : next.searchParams.delete('periods');
-    location.href = next;
-  }
-  document.getElementById('period-recent').addEventListener('click', () => setPeriodView('recent'));
-  document.getElementById('period-all').addEventListener('click', () => setPeriodView('all'));
-  document.querySelectorAll('[data-section-filter]').forEach(button => button.addEventListener('click', () => {
-    const wanted = button.dataset.sectionFilter;
-    document.querySelectorAll('[data-section-filter]').forEach(b => b.classList.toggle('active', b === button));
-    table.querySelectorAll('tbody tr[data-section]').forEach(row => {
-      row.hidden = wanted !== 'all' && row.dataset.section !== wanted;
-    });
-  }));
 
   // Performance-over-time chart — quarterly return % bars + cumulative line
   const labels = quarters.map(q => q.quarter_label);
