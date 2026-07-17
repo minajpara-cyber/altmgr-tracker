@@ -141,7 +141,9 @@
                             BX: { ECRED_LX: ['ecred.com', 'https://www.ecred.com/resources/'],
                                   BEPIF: ['bepif.com', 'https://www.bepif.com/shareholders/'],
                                   BXPE_LX: ['bxpef.com', 'https://www.bxpef.com/information/'] } };
-              const FUNDSQUARE = { HL_GPA: 1, K_PRIME: 1, AESIF: 1, CAPM_LX: 1, BII: 1 };
+              const FUNDSQUARE = { HL_GPA: 1, HL_GPI: 1, HL_GVC: 1, HL_GPS: 1,
+                                   K_PRIME: 1, AESIF: 1, CAPM_LX: 1,
+                                   CAPM_SEC: 1, BII: 1 };
               let src = SRC[universe.sponsor];
               if (src && !Array.isArray(src)) src = src[ticker];
               if (!src && FUNDSQUARE[ticker])
