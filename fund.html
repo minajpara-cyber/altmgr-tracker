@@ -120,6 +120,31 @@
     return notes[lbl] ? `${lbl}: ${notes[lbl]}` : '';
   })();
 
+  // Portfolio composition (PG factsheet strategy mix) — latest month
+  const MIX_TITLES = {
+    asset_class: 'By asset class', financing_stage: 'By financing stage',
+    region: 'By region', transaction_type: 'By transaction type',
+    industry_sector: 'By industry sector',
+  };
+  const MIX_ORDER = ['asset_class', 'financing_stage', 'region',
+                     'transaction_type', 'industry_sector'];
+  const mix = (data.asset_mix || {})[ticker];
+  const mixHtml = mix ? `
+    <h2 class="section-title">Portfolio composition</h2>
+    <div style="font-size:12px;color:var(--muted);margin:-8px 0 10px;">
+      Manager factsheet, as of ${fmtDate(mix.as_of)}${mix.months > 1 ? ` · ${mix.months} months collected` : ''}</div>
+    <div class="stat-row">
+      ${MIX_ORDER.filter(c => mix.categories[c]).map(c => `
+        <div class="stat-card" style="min-width:210px;">
+          <div class="label">${MIX_TITLES[c] || c}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
+            ${mix.categories[c].map(([lb, p]) => `
+              <tr><td style="padding:2px 0;color:var(--muted);">${lb}</td>
+                  <td style="padding:2px 0;text-align:right;font-variant-numeric:tabular-nums;">${p % 1 ? p.toFixed(1) : p}%</td></tr>`).join('')}
+          </table>
+        </div>`).join('')}
+    </div>` : '';
+
   root.innerHTML = `
     <div class="fund-header">
       <div class="name-row">
@@ -165,6 +190,7 @@
       <div class="stat-card"><div class="label">Periods tracked</div><div class="value">${quartersAll.length}</div><div class="sub">${first.quarter_label} → ${latest.quarter_label}</div></div>
     </div>
     ${fxNote ? `<div style="margin:-6px 0 14px;font-size:12px;color:var(--muted);">FX: reported in EUR, shown in USD — ${fxNote}</div>` : ''}
+    ${mixHtml}
 
     <h2 class="section-title">Performance over time</h2>
     <div class="chart-wrap" style="height:280px;"><canvas id="perfChart"></canvas></div>
