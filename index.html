@@ -40,11 +40,13 @@
   <h2 id="funds">Funds</h2>
   <div class="table-toolbar">
     <label class="field"><span>Search funds</span><input type="text" id="search" placeholder="Ticker, name, sponsor…"></label>
-    <label class="field"><span>Region</span><select id="region-filter">
-      <option value="">All regions</option>
-      <option value="us">US (SEC filers)</option>
-      <option value="intl">International (non-SEC)</option>
-    </select></label>
+    <label class="field"><span>Region</span>
+      <div id="region-toggle" style="display:flex;gap:0;">
+        <button class="btn" type="button" data-region="" style="border-radius:6px 0 0 6px;">All</button>
+        <button class="btn" type="button" data-region="us" style="border-radius:0;border-left:0;">US filers</button>
+        <button class="btn" type="button" data-region="intl" style="border-radius:0 6px 6px 0;border-left:0;">Non-US</button>
+      </div>
+    </label>
     <label class="field"><span>Strategy</span><select id="strategy-filter"><option value="">All strategies</option></select></label>
     <label class="field"><span>Sponsor</span><select id="sponsor-filter"><option value="">All sponsors</option></select></label>
     <button class="btn" id="clear-filters" type="button">Clear</button>
@@ -199,9 +201,12 @@
       }},
       {title: 'Legal Name', field: 'legal_name', minWidth: 200, formatter: (cell) => {
          const r = cell.getRow().getData();
-         const name = cell.getValue() || '';
+         let name = cell.getValue() || '';
          if (r.category === 'Partnership') {
-           return `${name} <span style="font-size:10px;font-weight:700;color:#fff;background:#735600;padding:1px 5px;border-radius:8px;white-space:nowrap">PARTNERSHIP</span>`;
+           name += ` <span style="font-size:10px;font-weight:700;color:#fff;background:#735600;padding:1px 5px;border-radius:8px;white-space:nowrap">PARTNERSHIP</span>`;
+         }
+         if (r.intl) {
+           name += ` <span style="font-size:10px;font-weight:700;color:#fff;background:#1f5fa6;padding:1px 5px;border-radius:8px;white-space:nowrap">NON-US</span>`;
          }
          return name;
       }},
@@ -238,12 +243,16 @@
     ],
   });
 
+  let regionVal = '';
+  function paintRegionToggle() {
+    document.querySelectorAll('#region-toggle button').forEach(b =>
+      b.classList.toggle('primary', b.dataset.region === regionVal));
+  }
   function applyFilter() {
     const q = (document.getElementById('search').value || '').toLowerCase().trim();
     const strat = stratSel.value;
     const sp = spSel.value;
-    const regionSel = document.getElementById('region-filter');
-    const region = regionSel ? regionSel.value : '';
+    const region = regionVal;
     table.setFilter((row) => {
       if (region === 'us' && row.intl) return false;
       if (region === 'intl' && !row.intl) return false;
@@ -259,16 +268,21 @@
       return true;
     });
     const url = new URL(location.href);
-    const values = { q, strategy: strat, sponsor: sp };
+    const values = { q, strategy: strat, sponsor: sp, region: regionVal };
     for (const [key, value] of Object.entries(values)) value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
     history.replaceState(null, '', url);
   }
   document.getElementById('search').addEventListener('input', applyFilter);
   stratSel.addEventListener('change', applyFilter);
   spSel.addEventListener('change', applyFilter);
-  document.getElementById('region-filter').addEventListener('change', applyFilter);
+  document.querySelectorAll('#region-toggle button').forEach(b =>
+    b.addEventListener('click', () => {
+      regionVal = b.dataset.region;
+      paintRegionToggle();
+      applyFilter();
+    }));
   const _cf = document.getElementById('clear-filters');
-  if (_cf) _cf.addEventListener('click', () => { const r = document.getElementById('region-filter'); if (r) r.value = ''; applyFilter(); });
+  if (_cf) _cf.addEventListener('click', () => { regionVal = ''; paintRegionToggle(); applyFilter(); });
   table.on('dataFiltered', (_filters, filteredRows) => {
     document.getElementById('result-meta').textContent = `${filteredRows.length} of ${rows.length} funds`;
   });
@@ -284,6 +298,16 @@
   document.getElementById('search').value = initialParams.get('q') || '';
   stratSel.value = initialParams.get('strategy') || '';
   spSel.value = initialParams.get('sponsor') || '';
+  regionVal = ['us', 'intl'].includes(initialParams.get('region'))
+    ? initialParams.get('region') : '';
+  // live counts on the region toggle
+  const nIntl = rows.filter(r => r.intl).length;
+  const lbl = { '': `All (${rows.length})`, us: `US filers (${rows.length - nIntl})`,
+                intl: `Non-US (${nIntl})` };
+  document.querySelectorAll('#region-toggle button').forEach(b => {
+    b.textContent = lbl[b.dataset.region];
+  });
+  paintRegionToggle();
   table.on('tableBuilt', applyFilter);
 })();
 </script>
