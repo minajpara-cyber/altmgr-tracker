@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
-<link rel="stylesheet" href="./style.css?v=20260714-1">
+<link rel="stylesheet" href="./style.css?v=20260727-1">
 <style>
   .controls-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 8px 0 12px; }
   .controls-row label { font-size: 13px; }
@@ -390,18 +390,35 @@
     });
   }
 
-  tickerSel.addEventListener('change', () => { renderChart(); renderTable(); });
+  // When the selected fund has nothing for the current metric (e.g. the PG
+  // grid-history funds carry only monthly returns, no flow data), hop to the
+  // first metric that IS populated instead of drawing an empty chart. Only
+  // runs on fund/filter changes — an explicit metric pick is never overridden.
+  function autoMetric() {
+    const metricSel = document.getElementById('metric');
+    const rows = byTicker.get(tickerSel.value) || [];
+    const has = m => rows.some(r => valueOf(r, m) != null);
+    if (has(metricSel.value)) return;
+    const prefs = ['subs_best', 'monthly_return_pct', 'nav_per_share_class_i',
+                   'aggregate_nav_usd', 'redemptions'];
+    const pick = prefs.find(has)
+      || [...metricSel.options].map(o => o.value).find(has);
+    if (pick) metricSel.value = pick;
+  }
+
+  tickerSel.addEventListener('change', () => { autoMetric(); renderChart(); renderTable(); });
   document.getElementById('metric').addEventListener('change', renderChart);
   // Filter changes re-narrow the fund dropdown; if the active fund survives
   // the new filter we keep it, otherwise we pick the largest match.
   function onFilterChange() {
     const before = tickerSel.value;
     populateFundDropdown();
-    if (tickerSel.value !== before) { renderChart(); renderTable(); }
+    if (tickerSel.value !== before) { autoMetric(); renderChart(); renderTable(); }
   }
   stratSel.addEventListener('change', onFilterChange);
   sponsorSel.addEventListener('change', onFilterChange);
 
+  autoMetric();
   renderChart();
   renderTable();
 })();

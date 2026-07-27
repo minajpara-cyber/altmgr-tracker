@@ -68,7 +68,9 @@ header.topbar .meta {
   header.topbar nav a { font-size: 10px; }
 }
 
-main { padding: 18px 22px 60px; max-width: 1500px; }
+/* Fluid width: use the whole screen on big monitors (more table columns
+   visible), centered with a sanity ceiling for ultrawides. */
+main { padding: 18px 22px 60px; max-width: min(97vw, 2400px); margin: 0 auto; }
 
 /* Section title */
 h1, h2, h3 { margin: 0 0 8px; font-weight: 600; letter-spacing: 0.01em; }

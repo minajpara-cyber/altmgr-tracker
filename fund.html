@@ -5,7 +5,7 @@
 <title>Fund detail — Alt-Manager Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./style.css?v=20260714-1">
+<link rel="stylesheet" href="./style.css?v=20260727-1">
 </head>
 <body>
 <header class="topbar">
@@ -214,6 +214,7 @@
     <div class="qtable-wrap">
       <table class="qtable" id="qtable"></table>
     </div>
+    <div id="monthly-history"></div>
   `;
 
   // ---- Build transposed table ----
@@ -488,6 +489,67 @@
       },
     },
   });
+
+  // ---- Monthly return history (year × month grid, bottom of page) --------
+  // Lazy-fetches data-monthly.json (monthly rows are not in data-core.json)
+  // and renders the fund's monthly net return track record — deepest for the
+  // PG factsheet-grid funds (TPF Trust back to 2003), but any fund with ≥6
+  // months of monthly_return_pct gets the section. FY = compounded from the
+  // months shown; * marks partial years.
+  (async () => {
+    let md;
+    try { md = await loadData('./data-monthly.json'); } catch { return; }
+    const mrows = (md.monthly || [])
+      .filter(r => r.ticker === ticker && r.monthly_return_pct != null);
+    if (mrows.length < 6) return;
+    const SRC_LABELS = {
+      factsheet_grid: 'manager factsheet track record (lead class, net)',
+      factsheet: 'manager factsheet (stated MTD)',
+    };
+    const srcs = [...new Set(mrows.map(r => r.monthly_return_src).filter(Boolean))]
+      .map(s => SRC_LABELS[s] || s);
+    const byYear = new Map();
+    for (const r of mrows) {
+      const y = +r.as_of_date.slice(0, 4), m = +r.as_of_date.slice(5, 7);
+      if (!byYear.has(y)) byYear.set(y, {});
+      byYear.get(y)[m] = r.monthly_return_pct;
+    }
+    const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const cell = v => v == null
+      ? '<td class="mh-c zero">—</td>'
+      : `<td class="mh-c ${signClass(v)}">${v.toFixed(1)}</td>`;
+    const rowsHtml = [...byYear.keys()].sort((a, b) => b - a).map(y => {
+      const ms = byYear.get(y);
+      let comp = 1, n = 0;
+      for (let m = 1; m <= 12; m++) if (ms[m] != null) { comp *= 1 + ms[m] / 100; n++; }
+      const fy = (comp - 1) * 100;
+      return `<tr><td class="mh-c mh-y">${y}</td>`
+        + MN.map((_, i) => cell(ms[i + 1])).join('')
+        + `<td class="mh-c mh-fy ${signClass(fy)}">${fy.toFixed(1)}${n < 12 ? '*' : ''}</td></tr>`;
+    }).join('');
+    document.getElementById('monthly-history').innerHTML = `
+      <style>
+        #monthly-history .mh-c { padding:3px 7px; text-align:right;
+          font-variant-numeric:tabular-nums; font-size:12.5px; white-space:nowrap; }
+        #monthly-history th.mh-c { color:var(--muted); font-weight:600;
+          border-bottom:1px solid var(--border, #ddd); }
+        #monthly-history .mh-y { font-weight:600; text-align:left; }
+        #monthly-history .mh-fy { font-weight:600;
+          border-left:1px solid var(--border, #ddd); }
+      </style>
+      <h2 class="section-title">Monthly return history</h2>
+      <div style="font-size:12px;color:var(--muted);margin:-8px 0 10px;">
+        ${mrows.length} months, ${mrows[0].as_of_date.slice(0,7)} →
+        ${mrows[mrows.length-1].as_of_date.slice(0,7)} · net monthly return %
+        · source: ${srcs.join(' + ') || '—'}
+        · FY compounded from months shown, * = partial year</div>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:collapse;min-width:740px;">
+          <tr><th class="mh-c"></th>${MN.map(m => `<th class="mh-c">${m}</th>`).join('')}<th class="mh-c">FY</th></tr>
+          ${rowsHtml}
+        </table>
+      </div>`;
+  })();
 })();
 </script>
 </body>
