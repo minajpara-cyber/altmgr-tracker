@@ -3,8 +3,9 @@
    silently kills the whole script. */
 (() => {
 const MGRC = {BX:"#16803c", KKR:"#b45309", CG:"#1d4ed8", APO:"#7c3aed",
-              ARES:"#0e7490", OWL:"#be185d", TPG:"#57534e"};
-const SYM = {USD:"$", EUR:"€", JPY:"¥", GBP:"£"};
+              ARES:"#0e7490", OWL:"#be185d", TPG:"#57534e",
+              BAM:"#a16207", EQT:"#3f6212", CVC:"#701a75"};
+const SYM = {USD:"$", EUR:"€", JPY:"¥", GBP:"£", CAD:"C$"};
 let D = null, charts = {};
 
 const fmtM = (v, ccy) => v == null ? "" :
