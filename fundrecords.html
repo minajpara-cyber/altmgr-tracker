@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fund Records — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css?v=20260803-1">
+<style>
+  .chart-hint { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
+  .tbl { margin-bottom: 26px; }
+  h2 { margin-top: 26px; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .controls-row { margin: 10px 0; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .controls-row label { font-family: var(--mono); font-size: 12px; }
+  .controls-row select, .controls-row input { width: auto; min-width: 150px; }
+  .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 4px; line-height: 1.5; }
+  .spon-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; margin-bottom: 26px; }
+  .spon-chart { flex: 1 1 460px; min-width: 380px; }
+  #tbl-frleague .tabulator-row { cursor: pointer; }
+  .tabulator-row.tabulator-selected { background: #fdf2df !important; }
+  .drift-bad { color: #b91c1c; font-weight: 600; }
+  .drift-good { color: #15803d; }
+  #drill-title { margin: 20px 0 4px; font-size: 15px; }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px;
+           padding: 1px 7px; border: 1px solid var(--border, #d1d5db);
+           border-radius: 9px; margin-left: 8px; vertical-align: 2px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./manager.html">Manager</a>
+    <a href="./strategy.html">Strategy</a>
+    <a href="./monthly.html">Monthly</a>
+    <a href="./secondaries.html">GP Stakes</a>
+    <a href="./fundrecords.html" class="active">Fund Records</a>
+    <a href="./fund.html">Fund</a>
+    <a href="./compare.html">Compare</a>
+    <a href="./filings.html">Filings</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>Fund records — drawdown-fund performance from manager 10-Qs</h1>
+  <p class="chart-hint">
+    The fund-by-fund "investment record" tables that the seven listed
+    managers restate in every 10-Q/10-K, stacked into a time series:
+    committed capital, invested / realized / unrealized value and
+    since-inception IRRs &amp; multiples for every disclosed drawdown fund.
+    Because each filing restates the whole table, the quarter-over-quarter
+    <em>change</em> in a fund's reported net IRR ("drift") is a clean
+    marks-under-pressure signal.
+  </p>
+
+  <div class="stat-row">
+    <div class="stat-card"><div class="label">Fund series</div><div class="value" id="st-funds">…</div><div class="sub" id="st-funds-sub"></div></div>
+    <div class="stat-card"><div class="label">Unrealized value (USD)</div><div class="value" id="st-unrl">…</div><div class="sub">across disclosed funds, latest quarters</div></div>
+    <div class="stat-card"><div class="label">Median net IRR</div><div class="value" id="st-irr">…</div><div class="sub" id="st-irr-sub"></div></div>
+    <div class="stat-card headline"><div class="label">Worst 4-qtr IRR drift</div><div class="value" id="st-drift">…</div><div class="sub" id="st-drift-sub"></div></div>
+  </div>
+
+  <h2>League table</h2>
+  <p class="chart-hint">Every fund at its manager's latest reported quarter.
+    Money in <b>reported-currency millions</b> (€/¥ where flagged). Click a
+    row for the fund's full history. MOIC* = the manager's headline multiple
+    (basis varies — see footnotes). Δ4q = change in reported net IRR over
+    four quarters, in points.</p>
+  <div class="controls-row">
+    <label>Manager <select id="f-mgr"><option value="">All</option></select></label>
+    <label>Segment <select id="f-seg"><option value="">All</option></select></label>
+    <label>Vintage <select id="f-coh"><option value="">All</option></select></label>
+    <label>Find <input id="f-q" type="text" placeholder="fund name…"></label>
+  </div>
+  <div id="tbl-frleague" class="tbl"></div>
+
+  <h3 id="drill-title" style="display:none"></h3>
+  <div class="spon-row" id="drill-row" style="display:none">
+    <div class="spon-chart"><canvas id="drillIrr" height="230"></canvas>
+      <p class="chart-hint">Reported since-inception IRRs by quarter.</p></div>
+    <div class="spon-chart"><canvas id="drillVal" height="230"></canvas>
+      <p class="chart-hint">Value bridge: realized + unrealized vs committed
+        (reported-currency millions).</p></div>
+  </div>
+
+  <h2>IRR-drift watchlist</h2>
+  <p class="chart-hint">Funds whose reported since-inception net IRR fell the
+    most over the last four quarters (unrealized value &gt; 500m). Young
+    funds coming off their first marked quarters can drift steeply without
+    distress — read vintage alongside drift.</p>
+  <div id="tbl-frwatch" class="tbl"></div>
+
+  <h2>Manager rollups</h2>
+  <div class="spon-row">
+    <div class="spon-chart"><canvas id="chUnrl" height="240"></canvas>
+      <p class="chart-hint">Unrealized value in disclosed drawdown funds,
+        $bn (EUR/JPY funds converted at ECB quarter-end rates).</p></div>
+    <div class="spon-chart"><canvas id="chRaise" height="240"></canvas>
+      <p class="chart-hint">Fundraising proxy: positive quarter-over-quarter
+        changes in committed capital, $bn — new closes and fund launches
+        (also captures funds newly added to the tables).</p></div>
+  </div>
+  <div class="spon-row">
+    <div class="spon-chart"><canvas id="chDry" height="240"></canvas>
+      <p class="chart-hint">Dry powder (uncalled / available capital), $bn —
+        only Blackstone and KKR disclose it per fund in these tables.</p></div>
+    <div class="spon-chart" id="cohort-box"><canvas id="chCohort" height="240"></canvas>
+      <p class="chart-hint">Median reported net IRR by vintage cohort at the
+        latest quarter (funds with ≥ 250m committed).</p></div>
+  </div>
+
+  <p class="footnote">
+    <b>Sources &amp; method.</b> Parsed from each manager's 10-Q/10-K
+    "investment record" / significant-funds tables (SEC EDGAR), 2017-Q4
+    onward (TPG from its 2022 IPO; Blue Owl from FY2021). Values are as
+    reported: Blackstone in thousands (scaled), others in millions; euro-
+    and yen-denominated funds (BREP Europe, CEP/CEREP, CJP…) stay in their
+    reported currency at fund level and convert to USD only in the rollup
+    charts. Fund relabels are stitched (BEP→Energy, Dyal→GP Stakes,
+    TPG's Angelo Gordon platform dissolution…). MOIC bases differ by
+    manager: BX/CG report total-value MOIC, KKR/TPG gross multiple,
+    ARES/OWL gross &amp; net; the league shows each manager's headline
+    multiple. IRRs are since inception, net of fees where labeled Net.
+    "NM" (too young to be meaningful) shows blank. This is disclosure data —
+    coverage follows what each manager chooses to show, and funds are
+    occasionally bundled or dropped.
+  </p>
+</main>
+
+<script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="./app.js?v=20260714-1"></script>
+<script src="./fundrecords.js?v=20260803-6"></script>
+</body>
+</html>
