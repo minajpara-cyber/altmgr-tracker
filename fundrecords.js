@@ -77,7 +77,11 @@ function league() {
     columns: [
       {title: "Mgr", field: "m", width: 66,
        formatter: c => D.mgr_names[c.getValue()] || c.getValue()},
-      {title: "Fund", field: "name", minWidth: 210},
+      {title: "Fund", field: "name", minWidth: 210,
+       formatter: c => c.getValue() + (c.getData().plan
+         ? ' <span class="badge">' + c.getData().plan.toLowerCase() +
+           (c.getData().pctinv ? " · ~" + c.getData().pctinv + "% inv" : "")
+           + "</span>" : "")},
       {title: "Segment", field: "seg", width: 150},
       {title: "Vint", field: "vint", width: 62, hozAlign: "center"},
       {title: "Committed (m)", field: "usd_committed", sorter: "number", hozAlign: "right",
@@ -135,7 +139,8 @@ function drill(row) {
     D.mgr_names[fd.m] + " — " + fd.name +
     '<span class="badge">' + (fd.seg || "") + '</span>' +
     (fd.vint ? '<span class="badge">vintage ' + fd.vint + '</span>' : "") +
-    (fd.ccy !== "USD" ? '<span class="badge">' + fd.ccy + '</span>' : "");
+    (fd.ccy !== "USD" ? '<span class="badge">' + fd.ccy + '</span>' : "") +
+    (fd.plan ? '<span class="badge">' + fd.plan + '</span>' : "");
   const labels = D.periods.slice(fd.p0, fd.p0 + fd.committed.length);
 
   charts.irr && charts.irr.destroy();
