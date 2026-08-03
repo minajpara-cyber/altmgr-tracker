@@ -23,6 +23,14 @@
   .drift-bad { color: #b91c1c; font-weight: 600; }
   .drift-good { color: #15803d; }
   #drill-title { margin: 20px 0 4px; font-size: 15px; }
+  .frpills { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
+  .frpills button { font-family: var(--mono); font-size: 13px; padding: 7px 16px;
+    border: 1px solid var(--border, #d1d5db); background: transparent;
+    border-radius: 999px; cursor: pointer; color: inherit; }
+  .frpills button.active { background: var(--accent, #d58a16); color: #fff;
+    border-color: var(--accent, #d58a16); font-weight: 600; }
+  .frview { display: none; }
+  .frview.active { display: block; }
   .badge { display: inline-block; font-family: var(--mono); font-size: 11px;
            padding: 1px 7px; border: 1px solid var(--border, #d1d5db);
            border-radius: 9px; margin-left: 8px; vertical-align: 2px; }
@@ -38,7 +46,6 @@
     <a href="./monthly.html">Monthly</a>
     <a href="./secondaries.html">GP Stakes</a>
     <a href="./fundrecords.html" class="active">Fund Records</a>
-    <a href="./fund.html">Fund</a>
     <a href="./compare.html">Compare</a>
     <a href="./filings.html">Filings</a>
   </nav>
@@ -48,152 +55,154 @@
 <main>
   <h1>Fund records — drawdown-fund performance from manager 10-Qs</h1>
   <p class="chart-hint">
-    The fund-by-fund "investment record" tables that the seven listed
-    managers restate in every 10-Q/10-K, stacked into a time series:
-    committed capital, invested / realized / unrealized value and
-    since-inception IRRs &amp; multiples for every disclosed drawdown fund.
-    Because each filing restates the whole table, the quarter-over-quarter
-    <em>change</em> in a fund's reported net IRR ("drift") is a clean
-    marks-under-pressure signal.
+    The fund-by-fund "investment record" tables that ten listed managers
+    restate every reporting period, stacked into a time series. Four views:
+    <b>Overview</b> (state of the book), <b>Funds</b> (browse &amp; drill
+    into any fund), <b>Peers</b> (like-for-like benchmarking),
+    <b>Managers</b> (per-manager trends).
   </p>
-
-  <div class="stat-row">
-    <div class="stat-card"><div class="label">Fund series</div><div class="value" id="st-funds">…</div><div class="sub" id="st-funds-sub"></div></div>
-    <div class="stat-card"><div class="label">Unrealized value (USD)</div><div class="value" id="st-unrl">…</div><div class="sub">across disclosed funds, latest quarters</div></div>
-    <div class="stat-card"><div class="label">Median net IRR</div><div class="value" id="st-irr">…</div><div class="sub" id="st-irr-sub"></div></div>
-    <div class="stat-card headline"><div class="label">Worst 4-qtr IRR drift</div><div class="value" id="st-drift">…</div><div class="sub" id="st-drift-sub"></div></div>
+  <div class="frpills" id="frpills">
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="funds">Funds</button>
+    <button data-view="peers">Peers</button>
+    <button data-view="managers">Managers</button>
   </div>
 
-  <h2>League table</h2>
-  <p class="chart-hint">Every fund at its manager's latest reported quarter.
-    Money in <b>reported-currency millions</b> (€/¥ where flagged). Click a
-    row for the fund's full history. MOIC* = the manager's headline multiple
-    (basis varies — see footnotes). Δ4q = change in reported net IRR over
-    four quarters, in points.</p>
-  <div class="controls-row">
-    <label>Manager <select id="f-mgr"><option value="">All</option></select></label>
-    <label>Segment <select id="f-seg"><option value="">All</option></select></label>
-    <label>Strategy (x-mgr) <select id="f-bkt"><option value="">All</option></select></label>
-    <label>Vintage <select id="f-coh"><option value="">All</option></select></label>
-    <label>Find <input id="f-q" type="text" placeholder="fund name…"></label>
-  </div>
-  <div id="tbl-frleague" class="tbl"></div>
+  <section class="frview active" data-view="overview">
+    <div class="stat-row">
+      <div class="stat-card"><div class="label">Fund series</div><div class="value" id="st-funds">…</div><div class="sub" id="st-funds-sub"></div></div>
+      <div class="stat-card"><div class="label">Unrealized value (USD)</div><div class="value" id="st-unrl">…</div><div class="sub">across disclosed funds, latest quarters</div></div>
+      <div class="stat-card"><div class="label">Median net IRR</div><div class="value" id="st-irr">…</div><div class="sub" id="st-irr-sub"></div></div>
+      <div class="stat-card headline"><div class="label">Worst 4-qtr IRR drift</div><div class="value" id="st-drift">…</div><div class="sub" id="st-drift-sub"></div></div>
+    </div>
 
-  <h3 id="drill-title" style="display:none"></h3>
-  <div class="spon-row" id="drill-row" style="display:none">
-    <div class="spon-chart"><canvas id="drillIrr" height="230"></canvas>
-      <p class="chart-hint">Reported since-inception IRRs by quarter.</p></div>
-    <div class="spon-chart"><canvas id="drillVal" height="230"></canvas>
-      <p class="chart-hint">Value bridge: realized + unrealized vs committed
-        (reported-currency millions).</p></div>
-  </div>
+    <h2>Aging of the book</h2>
+    <p class="chart-hint">Unrealized value by fund age (report year minus
+      vintage year, USD at ECB quarter-end FX). NAV piling into 6–9 and
+      10y+ funds is capital that should be coming back — it pressures
+      future realized carry and the LP re-up cycle. Combined vehicles
+      without a vintage (~10% of NAV) are excluded from the split.</p>
+    <div class="controls-row">
+      <label>Scope <select id="ag-scope">
+        <option value="all">All strategies</option>
+        <option value="pe">Private equity only (Buyout / Growth / Opportunistic)</option>
+      </select></label>
+    </div>
+    <div class="spon-row">
+      <div class="spon-chart"><canvas id="chAgingNav" height="250"></canvas>
+        <p class="chart-hint">Unrealized value by fund age, $bn (stacked).</p></div>
+      <div class="spon-chart"><canvas id="chAging10" height="250"></canvas>
+        <p class="chart-hint">Share of each manager's known-vintage NAV in
+          funds aged 10y+.</p></div>
+    </div>
 
-  <h2>IRR-drift watchlist</h2>
-  <p class="chart-hint">Funds whose reported since-inception net IRR fell the
-    most over the last four quarters (unrealized value &gt; 500m). Young
-    funds coming off their first marked quarters can drift steeply without
-    distress — read vintage alongside drift.</p>
-  <div id="tbl-frwatch" class="tbl"></div>
+    <h2>Mark trajectory heatmap</h2>
+    <p class="chart-hint">Quarter-over-quarter change in each fund's
+      since-inception net IRR, weighted by unrealized value — green means
+      the book is being written up, red written down.</p>
+    <div id="drift-heat" style="overflow-x:auto; margin:10px 0 18px"></div>
+  </section>
 
-  <h2>Performance trajectory — improving or worsening?</h2>
-  <p class="chart-hint">Manager-level reading of the same fund tables.
-    <b>Weighted IRR drift</b> = quarter-over-quarter change in each fund's
-    since-inception net IRR, weighted by unrealized value — green means the
-    book is being written up, red written down. <b>Carry at risk</b> = share
-    of unrealized value sitting in funds reporting net IRR below an 8%
-    hurdle proxy (those funds are unlikely to be accruing carry).
-    <b>Realization pace</b> = realized proceeds as an annualized share of
-    the prior quarter's unrealized value — the engine of realized
-    performance fees.</p>
-  <div id="drift-heat" style="overflow-x:auto; margin:10px 0 18px"></div>
-  <div class="spon-row">
-    <div class="spon-chart"><canvas id="chBelow8" height="240"></canvas>
-      <p class="chart-hint">Carry at risk: % of unrealized value in funds
-        with reported net IRR &lt; 8%.</p></div>
-    <div class="spon-chart"><canvas id="chRealPace" height="240"></canvas>
-      <p class="chart-hint">Realization pace: realized proceeds ÷ prior
-        quarter unrealized value, annualized.</p></div>
-  </div>
+  <section class="frview" data-view="funds">
+    <h2>League table</h2>
+    <p class="chart-hint">Every fund at its manager's latest reported
+      quarter, in <b>reported-currency millions</b> (€/¥/C$ where flagged);
+      €/¥/C$ rows rank by USD equivalents. Click a row for the fund's full
+      history. Net IRRs below an 8% hurdle proxy show amber. Δ4q = change
+      in reported net IRR over four quarters, points.</p>
+    <div class="controls-row">
+      <label>Manager <select id="f-mgr"><option value="">All</option></select></label>
+      <label>Segment <select id="f-seg"><option value="">All</option></select></label>
+      <label>Strategy (x-mgr) <select id="f-bkt"><option value="">All</option></select></label>
+      <label>Vintage <select id="f-coh"><option value="">All</option></select></label>
+      <label>Find <input id="f-q" type="text" placeholder="fund name…"></label>
+    </div>
+    <div id="tbl-frleague" class="tbl"></div>
 
-  <h2>Peer benchmarking</h2>
-  <p class="chart-hint">Cross-manager comparison on a normalized strategy
-    axis (each manager's own segment labels are mapped to common buckets).
-    The franchise curves plot reported net IRR against <b>fund age</b>
-    (quarters since vintage year-end) for the largest funds in the chosen
-    bucket — same-age comparisons are the fair fight.</p>
-  <div class="controls-row">
-    <label>Strategy <select id="pb-bkt"></select></label>
-    <label>Vintage <select id="pb-coh"><option value="">All</option></select></label>
-  </div>
-  <div class="spon-row">
-    <div class="spon-chart"><canvas id="chFranchise" height="250"></canvas>
-      <p class="chart-hint">Net IRR vs fund age — largest funds in bucket,
-        colored by manager.</p></div>
-    <div class="spon-chart"><canvas id="chCohort" height="250"></canvas>
-      <p class="chart-hint">Median reported net IRR by vintage cohort in
-        the chosen bucket (funds ≥ 250m committed).</p></div>
-  </div>
+    <h3 id="drill-title" style="display:none"></h3>
+    <div class="spon-row" id="drill-row" style="display:none">
+      <div class="spon-chart"><canvas id="drillIrr" height="230"></canvas>
+        <p class="chart-hint">Reported since-inception IRRs by quarter.</p></div>
+      <div class="spon-chart"><canvas id="drillVal" height="230"></canvas>
+        <p class="chart-hint">Value bridge: realized + unrealized vs
+          committed (reported-currency millions).</p></div>
+    </div>
 
-  <h2>Aging of the book — NAV by fund age</h2>
-  <p class="chart-hint">Unrealized value (USD, ECB quarter-end FX) split by
-    fund age = report year minus vintage year. NAV stacking up in
-    <b>6–9 year</b> and especially <b>10y+</b> funds is capital that should
-    be getting returned — an aging book pressures future realized carry,
-    delays the LP re-up cycle, and signals exit-market dependence.
-    Combined vehicles reported without a vintage (~10% of NAV, e.g.
-    Tactical Opportunities "(Various)") are excluded from the age split;
-    coverage is what the managers themselves disclose.</p>
-  <div class="controls-row">
-    <label>Scope <select id="ag-scope">
-      <option value="all">All strategies</option>
-      <option value="pe">Private equity only (Buyout / Growth / Opportunistic)</option>
-    </select></label>
-  </div>
-  <div class="spon-row">
-    <div class="spon-chart"><canvas id="chAgingNav" height="250"></canvas>
-      <p class="chart-hint">Unrealized value by fund age, $bn (stacked).</p></div>
-    <div class="spon-chart"><canvas id="chAging10" height="250"></canvas>
-      <p class="chart-hint">Share of each manager's known-vintage NAV in
-        funds aged 10y+ — who is sitting on the oldest book.</p></div>
-  </div>
+    <h2>IRR-drift watchlist</h2>
+    <p class="chart-hint">Largest 4-quarter declines in reported
+      since-inception net IRR (unrealized &gt; 500m). Young funds coming
+      off their first marks can drift steeply without distress — read
+      vintage alongside drift.</p>
+    <div id="tbl-frwatch" class="tbl"></div>
+  </section>
 
-  <h2>Manager rollups</h2>
-  <div class="spon-row">
-    <div class="spon-chart"><canvas id="chUnrl" height="240"></canvas>
-      <p class="chart-hint">Unrealized value in disclosed drawdown funds,
-        $bn (EUR/JPY funds converted at ECB quarter-end rates).</p></div>
-    <div class="spon-chart"><canvas id="chRaise" height="240"></canvas>
-      <p class="chart-hint">Fundraising proxy: positive quarter-over-quarter
-        changes in committed capital, $bn — new closes and fund launches
-        (also captures funds newly added to the tables).</p></div>
-  </div>
-  <div class="spon-row">
-    <div class="spon-chart"><canvas id="chDry" height="240"></canvas>
-      <p class="chart-hint">Dry powder (uncalled / available capital), $bn —
-        only Blackstone and KKR disclose it per fund in these tables.</p></div>
-  </div>
+  <section class="frview" data-view="peers">
+    <h2>Peer benchmarking</h2>
+    <p class="chart-hint">Cross-manager comparison on a normalized strategy
+      axis (each manager's segment labels map to common buckets). Franchise
+      curves plot reported net IRR against <b>fund age</b> — same-age
+      comparisons are the fair fight.</p>
+    <div class="controls-row">
+      <label>Strategy <select id="pb-bkt"></select></label>
+      <label>Vintage <select id="pb-coh"><option value="">All</option></select></label>
+    </div>
+    <div class="spon-row">
+      <div class="spon-chart"><canvas id="chFranchise" height="250"></canvas>
+        <p class="chart-hint">Net IRR vs fund age (quarters since vintage
+          year-end) — largest funds in bucket, colored by manager.</p></div>
+      <div class="spon-chart"><canvas id="chCohort" height="250"></canvas>
+        <p class="chart-hint">Median reported net IRR by vintage cohort in
+          the chosen bucket (funds ≥ 250m committed).</p></div>
+    </div>
+  </section>
+
+  <section class="frview" data-view="managers">
+    <h2>Manager trends</h2>
+    <p class="chart-hint"><b>Carry at risk</b> = share of unrealized value
+      in funds reporting net IRR below an 8% hurdle proxy (unlikely to be
+      accruing carry). <b>Realization pace</b> = realized proceeds ÷ prior
+      quarter's unrealized value, annualized — the engine of realized
+      performance fees.</p>
+    <div class="spon-row">
+      <div class="spon-chart"><canvas id="chBelow8" height="240"></canvas>
+        <p class="chart-hint">Carry at risk: % of unrealized value in funds
+          with reported net IRR &lt; 8%.</p></div>
+      <div class="spon-chart"><canvas id="chRealPace" height="240"></canvas>
+        <p class="chart-hint">Realization pace, annualized.</p></div>
+    </div>
+    <div class="spon-row">
+      <div class="spon-chart"><canvas id="chUnrl" height="240"></canvas>
+        <p class="chart-hint">Unrealized value in disclosed drawdown funds,
+          $bn (EUR/JPY/CAD converted at ECB quarter-end rates).</p></div>
+      <div class="spon-chart"><canvas id="chRaise" height="240"></canvas>
+        <p class="chart-hint">Fundraising proxy: positive quarter-over-quarter
+          changes in committed capital, $bn.</p></div>
+    </div>
+    <div class="spon-row">
+      <div class="spon-chart"><canvas id="chDry" height="240"></canvas>
+        <p class="chart-hint">Dry powder (uncalled / available capital),
+          $bn — only Blackstone and KKR disclose it per fund.</p></div>
+    </div>
+  </section>
 
   <p class="footnote">
     <b>Sources &amp; method.</b> Parsed from each manager's 10-Q/10-K
-    "investment record" / significant-funds tables (SEC EDGAR), 2017-Q4
-    onward (TPG from its 2022 IPO; Blue Owl from FY2021). Values are as
-    reported: Blackstone in thousands (scaled), others in millions; euro-
-    and yen-denominated funds (BREP Europe, CEP/CEREP, CJP…) stay in their
-    reported currency at fund level and convert to USD only in the rollup
-    charts. Fund relabels are stitched (BEP→Energy, Dyal→GP Stakes,
-    TPG's Angelo Gordon platform dissolution…). MOIC bases differ by
-    manager: BX/CG report total-value MOIC, KKR/TPG gross multiple,
-    ARES/OWL gross &amp; net; the league shows each manager's headline
-    multiple. IRRs are since inception, net of fees where labeled Net.
-    "NM" (too young to be meaningful) shows blank. This is disclosure data —
-    coverage follows what each manager chooses to show, and funds are
-    occasionally bundled or dropped.
+    "investment record" / significant-funds tables (SEC EDGAR), Brookfield's
+    quarterly supplemental decks, and EQT/CVC report PDFs (qualitative
+    plan-status only — they publish no fund-level numbers). 2017-Q4 onward
+    (TPG from its 2022 IPO; Blue Owl FY2021; Brookfield 2022-Q4; EQT
+    2025-Q2). Values as reported; EUR/JPY/CAD funds convert to USD only in
+    aggregates. Fund relabels stitched (BEP→Energy, Dyal→GP Stakes, TPG's
+    Angelo Gordon dissolution…). MOIC bases differ by manager (BX/CG
+    total-value MOIC, KKR/TPG gross multiple, ARES/OWL gross &amp; net).
+    IRRs are since inception. "NM" shows blank. Coverage follows what each
+    manager chooses to disclose.
   </p>
 </main>
 
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-11"></script>
+<script src="./fundrecords.js?v=20260803-13"></script>
 </body>
 </html>

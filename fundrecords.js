@@ -17,7 +17,30 @@ if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
   stats(); filters(); league(); watch(); trajectory(); peerBench(); agingNav(); rollups();
+  initViews();
 });
+
+function initViews() {
+  const pills = document.querySelectorAll("#frpills button");
+  const show = v => {
+    pills.forEach(b => b.classList.toggle("active", b.dataset.view === v));
+    document.querySelectorAll(".frview").forEach(s =>
+      s.classList.toggle("active", s.dataset.view === v));
+    history.replaceState(null, "", "#" + v);
+    // charts created inside hidden views render 0x0 — fix on reveal
+    setTimeout(() => {
+      document.querySelectorAll(`.frview[data-view="${v}"] canvas`)
+        .forEach(cv => { const ch = Chart.getChart(cv); ch && ch.resize(); });
+      if (v === "funds") {
+        leagueTable && leagueTable.redraw(true);
+        watchTable && watchTable.redraw(true);
+      }
+    }, 30);
+  };
+  pills.forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+  const h = location.hash.replace("#", "");
+  if (["funds", "peers", "managers"].includes(h)) show(h);
+}
 
 function stats() {
   const lg = D.league;
@@ -61,7 +84,7 @@ function filters() {
   document.getElementById("f-q").addEventListener("input", applyFilters);
 }
 
-let leagueTable = null;
+let leagueTable = null, watchTable = null;
 function applyFilters() {
   const m = document.getElementById("f-mgr").value;
   const s = document.getElementById("f-seg").value;
@@ -117,7 +140,7 @@ function league() {
 }
 
 function watch() {
-  new Tabulator("#tbl-frwatch", {
+  watchTable = new Tabulator("#tbl-frwatch", {
     data: D.watch, layout: "fitColumns", height: "380px",
     columns: [
       {title: "Mgr", field: "m", width: 66,
