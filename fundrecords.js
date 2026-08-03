@@ -326,8 +326,11 @@ function renderPeer() {
   const pool = D.funds.filter(fd => fd.bkt === b
       && (!c || fd.cohort === c) && fd.vint
       && (fundMetricArr(fd, met) || []).some(v => v != null))
-    .map(fd => ({fd, size: usdc[fkey(fd)]
-                 ?? Math.max(0, ...fd.committed.filter(v => v))}))
+    .map(fd => {
+      const fxr = {JPY: 0.0067, EUR: 1.08, CAD: 0.74, GBP: 1.27}[fd.ccy] || 1;
+      return {fd, size: usdc[fkey(fd)]
+              ?? Math.max(0, ...fd.committed.filter(v => v)) * fxr};
+    })
     .sort((a, z) => z.size - a.size);
   const excluded = pool.filter(({fd}) => pbExcl.has(fkey(fd)))
     .map(({fd}) => fd);
