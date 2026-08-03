@@ -73,6 +73,7 @@
   <div class="controls-row">
     <label>Manager <select id="f-mgr"><option value="">All</option></select></label>
     <label>Segment <select id="f-seg"><option value="">All</option></select></label>
+    <label>Strategy (x-mgr) <select id="f-bkt"><option value="">All</option></select></label>
     <label>Vintage <select id="f-coh"><option value="">All</option></select></label>
     <label>Find <input id="f-q" type="text" placeholder="fund name…"></label>
   </div>
@@ -94,6 +95,45 @@
     distress — read vintage alongside drift.</p>
   <div id="tbl-frwatch" class="tbl"></div>
 
+  <h2>Performance trajectory — improving or worsening?</h2>
+  <p class="chart-hint">Manager-level reading of the same fund tables.
+    <b>Weighted IRR drift</b> = quarter-over-quarter change in each fund's
+    since-inception net IRR, weighted by unrealized value — green means the
+    book is being written up, red written down. <b>Carry at risk</b> = share
+    of unrealized value sitting in funds reporting net IRR below an 8%
+    hurdle proxy (those funds are unlikely to be accruing carry).
+    <b>Realization pace</b> = realized proceeds as an annualized share of
+    the prior quarter's unrealized value — the engine of realized
+    performance fees.</p>
+  <div id="drift-heat" style="overflow-x:auto; margin:10px 0 18px"></div>
+  <div class="spon-row">
+    <div class="spon-chart"><canvas id="chBelow8" height="240"></canvas>
+      <p class="chart-hint">Carry at risk: % of unrealized value in funds
+        with reported net IRR &lt; 8%.</p></div>
+    <div class="spon-chart"><canvas id="chRealPace" height="240"></canvas>
+      <p class="chart-hint">Realization pace: realized proceeds ÷ prior
+        quarter unrealized value, annualized.</p></div>
+  </div>
+
+  <h2>Peer benchmarking</h2>
+  <p class="chart-hint">Cross-manager comparison on a normalized strategy
+    axis (each manager's own segment labels are mapped to common buckets).
+    The franchise curves plot reported net IRR against <b>fund age</b>
+    (quarters since vintage year-end) for the largest funds in the chosen
+    bucket — same-age comparisons are the fair fight.</p>
+  <div class="controls-row">
+    <label>Strategy <select id="pb-bkt"></select></label>
+    <label>Vintage <select id="pb-coh"><option value="">All</option></select></label>
+  </div>
+  <div class="spon-row">
+    <div class="spon-chart"><canvas id="chFranchise" height="250"></canvas>
+      <p class="chart-hint">Net IRR vs fund age — largest funds in bucket,
+        colored by manager.</p></div>
+    <div class="spon-chart"><canvas id="chCohort" height="250"></canvas>
+      <p class="chart-hint">Median reported net IRR by vintage cohort in
+        the chosen bucket (funds ≥ 250m committed).</p></div>
+  </div>
+
   <h2>Manager rollups</h2>
   <div class="spon-row">
     <div class="spon-chart"><canvas id="chUnrl" height="240"></canvas>
@@ -108,9 +148,6 @@
     <div class="spon-chart"><canvas id="chDry" height="240"></canvas>
       <p class="chart-hint">Dry powder (uncalled / available capital), $bn —
         only Blackstone and KKR disclose it per fund in these tables.</p></div>
-    <div class="spon-chart" id="cohort-box"><canvas id="chCohort" height="240"></canvas>
-      <p class="chart-hint">Median reported net IRR by vintage cohort at the
-        latest quarter (funds with ≥ 250m committed).</p></div>
   </div>
 
   <p class="footnote">
@@ -134,6 +171,6 @@
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-9"></script>
+<script src="./fundrecords.js?v=20260803-10"></script>
 </body>
 </html>

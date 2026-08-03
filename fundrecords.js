@@ -16,7 +16,7 @@ const fmtX = v => v == null ? "" : v.toFixed(2) + "x";
 if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
-  stats(); filters(); league(); watch(); rollups(); cohortChart();
+  stats(); filters(); league(); watch(); trajectory(); peerBench(); rollups();
 });
 
 function stats() {
@@ -54,7 +54,9 @@ function filters() {
   const cohs = [...new Set(D.league.map(r => r.cohort).filter(Boolean))].sort();
   const coh = document.getElementById("f-coh");
   cohs.forEach(c => coh.add(new Option(c, c)));
-  ["f-mgr", "f-seg", "f-coh"].forEach(id =>
+  const bkt = document.getElementById("f-bkt");
+  (D.buckets || []).forEach(b => bkt.add(new Option(b, b)));
+  ["f-mgr", "f-seg", "f-coh", "f-bkt"].forEach(id =>
     document.getElementById(id).addEventListener("change", applyFilters));
   document.getElementById("f-q").addEventListener("input", applyFilters);
 }
@@ -65,8 +67,9 @@ function applyFilters() {
   const s = document.getElementById("f-seg").value;
   const c = document.getElementById("f-coh").value;
   const q = document.getElementById("f-q").value.toLowerCase();
+  const b = document.getElementById("f-bkt").value;
   leagueTable.setFilter(row => (!m || row.m === m) && (!s || row.seg === s)
-    && (!c || row.cohort === c)
+    && (!c || row.cohort === c) && (!b || row.bkt === b)
     && (!q || row.name.toLowerCase().includes(q)));
 }
 
@@ -95,7 +98,11 @@ function league() {
       {title: "DPI", field: "dpi", sorter: "number", hozAlign: "right", width: 70,
        formatter: c => c.getValue() == null ? "" : c.getValue().toFixed(2)},
       {title: "Net IRR", field: "nirr", sorter: "number", hozAlign: "right", width: 84,
-       formatter: c => fmtPct(c.getValue())},
+       formatter: c => {
+         const v = c.getValue();
+         if (v != null && v < 8) c.getElement().style.color = "#b45309";
+         return fmtPct(v);
+       }},
       {title: "Δ4q", field: "drift4", sorter: "number", hozAlign: "right", width: 76,
        formatter: c => {
          const v = c.getValue();
@@ -177,6 +184,119 @@ function drill(row) {
     .scrollIntoView({behavior: "smooth", block: "center"});
 }
 
+function qnum(lab) {  // "Q3 2024" -> absolute quarter number
+  const [q, y] = lab.split(" ");
+  return parseInt(y) * 4 + parseInt(q[1]) - 1;
+}
+
+function trajectory() {
+  const mgrs = Object.keys(D.score || {});
+  const n = D.periods.length, span = Math.min(8, n);
+  const cols = D.periods.slice(n - span);
+  let h = '<table style="border-collapse:collapse; font-size:12px;' +
+          'font-variant-numeric:tabular-nums"><tr><th style="text-align:' +
+          'left;padding:3px 10px 3px 0">Weighted IRR drift (pp/qtr)</th>' +
+    cols.map(c => '<th style="padding:3px 8px">' + c + "</th>").join("") +
+    "</tr>";
+  for (const m of mgrs) {
+    const wd = D.score[m].wdrift.slice(n - span);
+    if (!wd.some(v => v != null)) continue;
+    h += '<tr><td style="padding:3px 10px 3px 0">' +
+         (D.mgr_names[m] || m) + "</td>" + wd.map(v => {
+      if (v == null) return '<td style="padding:3px 8px;color:#9ca3af;' +
+                            'text-align:center">·</td>';
+      const a = Math.min(Math.abs(v) / 1.5, 1) * 0.55;
+      const bg = v >= 0 ? `rgba(22,128,60,${a})` : `rgba(185,28,28,${a})`;
+      return '<td style="padding:3px 8px;text-align:center;background:' +
+             bg + '">' + (v > 0 ? "+" : "") + v.toFixed(1) + "</td>";
+    }).join("") + "</tr>";
+  }
+  document.getElementById("drift-heat").innerHTML = h + "</table>";
+
+  const mk = (id, key, fmt) => new Chart(document.getElementById(id), {
+    type: "line",
+    data: {labels: D.periods, datasets: mgrs
+      .filter(m => D.score[m][key].some(v => v != null))
+      .map(m => ({label: D.mgr_names[m] || m, data: D.score[m][key],
+        borderColor: MGRC[m], backgroundColor: MGRC[m],
+        pointRadius: 0, borderWidth: 1.8, spanGaps: false}))},
+    options: {animation: false, responsive: true,
+      plugins: {legend: {position: "bottom"}},
+      scales: {x: {ticks: {maxTicksLimit: 12}},
+               y: {ticks: {callback: fmt}}}},
+  });
+  mk("chBelow8", "below8", v => v + "%");
+  mk("chRealPace", "rrate", v => v + "%");
+}
+
+function peerBench() {
+  const bkt = document.getElementById("pb-bkt");
+  (D.buckets || []).forEach(b => bkt.add(new Option(b, b)));
+  bkt.value = "Buyout / Corporate PE";
+  const coh = document.getElementById("pb-coh");
+  [...new Set(D.league.map(r => r.cohort).filter(Boolean))].sort()
+    .forEach(c => coh.add(new Option(c, c)));
+  bkt.addEventListener("change", renderPeer);
+  coh.addEventListener("change", renderPeer);
+  renderPeer();
+}
+
+function renderPeer() {
+  const b = document.getElementById("pb-bkt").value;
+  const c = document.getElementById("pb-coh").value;
+
+  const cands = D.funds.filter(fd => fd.bkt === b
+      && (!c || fd.cohort === c) && fd.vint
+      && fd.nirr.some(v => v != null))
+    .map(fd => ({fd, size: Math.max(...fd.committed.filter(v => v))}))
+    .sort((a, z) => z.size - a.size).slice(0, 12);
+  charts.fran && charts.fran.destroy();
+  charts.fran = new Chart(document.getElementById("chFranchise"), {
+    type: "line",
+    data: {datasets: cands.map(({fd}) => {
+      const v0 = parseInt(fd.vint) * 4 + 3;
+      const pts = [];
+      fd.nirr.forEach((v, i) => {
+        if (v != null) pts.push({x: qnum(D.periods[fd.p0 + i]) - v0, y: v});
+      });
+      return {label: (D.mgr_names[fd.m] || fd.m) + " · " + fd.name,
+              data: pts, borderColor: MGRC[fd.m],
+              backgroundColor: MGRC[fd.m], pointRadius: 1.5,
+              borderWidth: 1.5, showLine: true};
+    })},
+    options: {animation: false, responsive: true, parsing: false,
+      plugins: {legend: {position: "bottom",
+                         labels: {boxWidth: 9, font: {size: 10}}}},
+      scales: {x: {type: "linear",
+                   title: {display: true,
+                           text: "fund age (quarters since vintage)"}},
+               y: {ticks: {callback: v => v + "%"}}}},
+  });
+
+  const cohorts = [...new Set(D.league.filter(r => r.bkt === b)
+    .map(r => r.cohort).filter(Boolean))].sort();
+  const meds = {};
+  for (const m of D.managers) {
+    meds[m] = cohorts.map(ch => {
+      const v = D.league.filter(r => r.m === m && r.bkt === b
+          && r.cohort === ch && r.nirr != null && (r.committed || 0) >= 250)
+        .map(r => r.nirr).sort((a, z) => a - z);
+      return v.length ? v[Math.floor(v.length / 2)] : null;
+    });
+  }
+  charts.coh && charts.coh.destroy();
+  charts.coh = new Chart(document.getElementById("chCohort"), {
+    type: "bar",
+    data: {labels: cohorts, datasets: D.managers
+      .filter(m => meds[m].some(v => v != null))
+      .map(m => ({label: D.mgr_names[m] || m, data: meds[m],
+        backgroundColor: MGRC[m] + "cc"}))},
+    options: {animation: false, responsive: true,
+      plugins: {legend: {position: "bottom"}},
+      scales: {y: {ticks: {callback: v => v + "%"}}}},
+  });
+}
+
 function rollups(){
   const L = D.periods;
   const mk = (id, key, type, stacked) => new Chart(
@@ -200,28 +320,4 @@ function rollups(){
   mk("chDry", "dry_powder", "line", false);
 }
 
-function cohortChart(){
-  const cohorts = [...new Set(D.league.map(r => r.cohort)
-    .filter(Boolean))].sort();
-  const meds = {};
-  for (const m of D.managers) meds[m] = [];
-  for (const m of D.managers) {
-    for (const c of cohorts) {
-      const v = D.league.filter(r => r.m === m && r.cohort === c
-          && r.nirr != null && (r.committed || 0) >= 250)
-        .map(r => r.nirr).sort((a, b) => a - b);
-      meds[m].push(v.length ? v[Math.floor(v.length / 2)] : null);
-    }
-  }
-  new Chart(document.getElementById("chCohort"), {
-    type: "bar",
-    data: {labels: cohorts, datasets: D.managers
-      .filter(m => meds[m].some(v => v != null))
-      .map(m => ({label: D.mgr_names[m] || m, data: meds[m],
-        backgroundColor: MGRC[m] + "cc"}))},
-    options: {animation: false, responsive: true,
-      plugins: {legend: {position: "bottom"}},
-      scales: {y: {ticks: {callback: v => v + "%"}}}},
-  });
-}
 })();
