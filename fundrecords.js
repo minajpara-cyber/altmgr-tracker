@@ -12,6 +12,7 @@ const fmtM = (v, ccy) => v == null ? "" :
 const fmtPct = v => v == null ? "" : v.toFixed(1) + "%";
 const fmtX = v => v == null ? "" : v.toFixed(2) + "x";
 
+if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
   stats(); filters(); league(); watch(); rollups(); cohortChart();
