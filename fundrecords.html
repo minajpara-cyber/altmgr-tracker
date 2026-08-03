@@ -96,6 +96,11 @@
           funds aged 10y+.</p></div>
     </div>
 
+    <div class="controls-row"><b style="font-size:13px">Data</b>
+      <button class="badge" style="cursor:pointer" id="dl-aging">download CSV</button></div>
+    <div style="overflow-x:auto"><div id="tbl-aging" class="tbl"></div></div>
+    <div style="overflow-x:auto"><div id="tbl-aging10" class="tbl"></div></div>
+
     <h2>Mark trajectory heatmap</h2>
     <p class="chart-hint">Quarter-over-quarter change in each fund's
       since-inception net IRR, weighted by unrealized value — green means
@@ -165,6 +170,10 @@
         <p class="chart-hint">Median reported net IRR by vintage cohort in
           the chosen bucket (funds ≥ 250m committed).</p></div>
     </div>
+    <div class="controls-row"><b style="font-size:13px">Peer set data</b>
+      <button class="badge" style="cursor:pointer" id="dl-peers">download CSV</button></div>
+    <div id="tbl-peerset" class="tbl"></div>
+    <div style="overflow-x:auto"><div id="tbl-cohmed" class="tbl"></div></div>
   </section>
 
   <section class="frview" data-view="managers">
@@ -194,6 +203,17 @@
         <p class="chart-hint">Dry powder (uncalled / available capital),
           $bn — only Blackstone and KKR disclose it per fund.</p></div>
     </div>
+    <div class="controls-row"><b style="font-size:13px">Data</b>
+      <label>Series <select id="mg-met">
+        <option value="below8">Carry at risk (%)</option>
+        <option value="rrate">Realization pace (% ann.)</option>
+        <option value="wdrift">Weighted IRR drift (pp)</option>
+        <option value="unrealized">Unrealized value ($bn)</option>
+        <option value="fundraising">Fundraising ($bn)</option>
+        <option value="dry_powder">Dry powder ($bn)</option>
+      </select></label>
+      <button class="badge" style="cursor:pointer" id="dl-mgr">download CSV</button></div>
+    <div style="overflow-x:auto"><div id="tbl-mgr" class="tbl"></div></div>
   </section>
 
   <p class="footnote">
@@ -214,6 +234,6 @@
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-16"></script>
+<script src="./fundrecords.js?v=20260803-17"></script>
 </body>
 </html>

@@ -17,8 +17,124 @@ if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
   stats(); filters(); league(); watch(); trajectory(); peerBench(); agingNav(); rollups();
-  initViews();
+  initTables(); initViews();
 });
+
+function matrixTable(el, head, rows) {
+  let h = '<table style="border-collapse:collapse;font-size:12px;' +
+          'font-variant-numeric:tabular-nums;white-space:nowrap"><tr>' +
+    head.map((c, i) => '<th style="text-align:' + (i ? "right" : "left") +
+      ';padding:3px 9px;border-bottom:1px solid #d1d5db">' + c +
+      "</th>").join("") + "</tr>";
+  for (const r of rows) {
+    h += "<tr>" + r.map((c, i) => '<td style="text-align:' +
+      (i ? "right" : "left") +
+      ';padding:2px 9px;border-bottom:1px solid #f3f4f6">' +
+      (c == null ? "·" : c) + "</td>").join("") + "</tr>";
+  }
+  document.getElementById(el).innerHTML = h + "</table>";
+}
+
+function agingTables() {
+  const scope = document.getElementById("ag-scope").value;
+  const a = D.aging[scope];
+  const rows = [], csv = [];
+  D.periods.forEach((p, i) => {
+    if (a.young[i] == null) return;
+    const tot = (a.young[i] + a.y6_9[i] + a.y10p[i]).toFixed(0);
+    rows.push([p, a.young[i], a.y6_9[i], a.y10p[i], tot, a.unk[i]]);
+    csv.push({period: p, under_6y_bn: a.young[i], y6_9_bn: a.y6_9[i],
+              y10plus_bn: a.y10p[i], total_known_bn: tot,
+              no_vintage_bn: a.unk[i]});
+  });
+  matrixTable("tbl-aging",
+    ["NAV by age ($bn)", "Under 6y", "6–9y", "10y+", "Total known",
+     "No vintage"], rows);
+  window.__agingCsv = csv;
+
+  const s10 = D.aging.share10_by_mgr;
+  const mgrs = Object.keys(s10);
+  const rows2 = D.periods.map((p, i) =>
+    [p, ...mgrs.map(m => s10[m][i])])
+    .filter(r => r.slice(1).some(v => v != null));
+  matrixTable("tbl-aging10",
+    ["10y+ share (%)", ...mgrs.map(m => D.mgr_names[m] || m)], rows2);
+}
+
+let peerTable = null;
+function peerTables(pool, met) {
+  const data = pool.map(({fd, size}) => {
+    const lg = D.league.find(r => fkey(r) === fkey(fd)) || {};
+    return {mgr: D.mgr_names[fd.m] || fd.m, name: fd.name, vint: fd.vint,
+      ccy: fd.ccy, committed: lg.committed, unrealized: lg.unrealized,
+      dpi: lg.dpi, moic: lg.moic, girr: lg.girr, nirr: lg.nirr,
+      drift4: lg.drift4,
+      excluded: pbExcl.has(fkey(fd)) ? "yes" : ""};
+  });
+  const cols = [
+    {title: "Mgr", field: "mgr", width: 86},
+    {title: "Fund", field: "name", minWidth: 200},
+    {title: "Vint", field: "vint", width: 60, hozAlign: "center"},
+    {title: "Committed (m)", field: "committed", sorter: "number",
+     hozAlign: "right", width: 112,
+     formatter: c => fmtM(c.getValue(), c.getData().ccy)},
+    {title: "Unrealized (m)", field: "unrealized", sorter: "number",
+     hozAlign: "right", width: 112,
+     formatter: c => fmtM(c.getValue(), c.getData().ccy)},
+    {title: "DPI", field: "dpi", sorter: "number", hozAlign: "right",
+     width: 66, formatter: c => c.getValue() == null ? "" :
+       c.getValue().toFixed(2)},
+    {title: "MOIC", field: "moic", sorter: "number", hozAlign: "right",
+     width: 70, formatter: c => fmtX(c.getValue())},
+    {title: "Gross IRR", field: "girr", sorter: "number",
+     hozAlign: "right", width: 88, formatter: c => fmtPct(c.getValue())},
+    {title: "Net IRR", field: "nirr", sorter: "number", hozAlign: "right",
+     width: 82, formatter: c => fmtPct(c.getValue())},
+    {title: "Δ4q", field: "drift4", sorter: "number", hozAlign: "right",
+     width: 66},
+    {title: "Excl.", field: "excluded", width: 56, hozAlign: "center"},
+  ];
+  if (peerTable) {
+    peerTable.setData(data);
+  } else {
+    peerTable = new Tabulator("#tbl-peerset", {data,
+      layout: "fitColumns", height: "420px",
+      initialSort: [{column: "committed", dir: "desc"}], columns: cols});
+  }
+  window.__peerCsv = data;
+}
+
+function mgrTable() {
+  const key = document.getElementById("mg-met").value;
+  const src = ("below8 rrate wdrift".includes(key))
+    ? Object.fromEntries(Object.keys(D.score)
+        .map(m => [m, D.score[m][key]]))
+    : Object.fromEntries(Object.keys(D.rollups)
+        .map(m => [m, D.rollups[m][key]]).filter(([, v]) => v));
+  const mgrs = Object.keys(src)
+    .filter(m => (src[m] || []).some(v => v != null && v !== 0));
+  const rows = D.periods.map((p, i) => [p, ...mgrs.map(m => src[m][i])])
+    .filter(r => r.slice(1).some(v => v != null));
+  matrixTable("tbl-mgr",
+    [document.getElementById("mg-met").selectedOptions[0].text,
+     ...mgrs.map(m => D.mgr_names[m] || m)], rows);
+  window.__mgrCsv = rows.map(r => Object.fromEntries(
+    [["period", r[0]], ...mgrs.map((m, j) => [m, r[j + 1]])]));
+}
+
+function initTables() {
+  agingTables();
+  document.getElementById("ag-scope")
+    .addEventListener("change", agingTables);
+  mgrTable();
+  document.getElementById("mg-met").addEventListener("change", mgrTable);
+  document.getElementById("dl-aging").addEventListener("click", () =>
+    downloadCsv("aging_nav.csv", window.__agingCsv || []));
+  document.getElementById("dl-peers").addEventListener("click", () =>
+    downloadCsv("peer_set.csv", window.__peerCsv || []));
+  document.getElementById("dl-mgr").addEventListener("click", () =>
+    downloadCsv("manager_trends.csv", window.__mgrCsv || []));
+}
 
 function initViews() {
   const pills = document.querySelectorAll("#frpills button");
@@ -35,6 +151,7 @@ function initViews() {
         leagueTable && leagueTable.redraw(true);
         watchTable && watchTable.redraw(true);
       }
+      if (v === "peers" && peerTable) peerTable.redraw(true);
     }, 30);
   };
   pills.forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
@@ -336,6 +453,7 @@ function renderPeer() {
     .map(({fd}) => fd);
   const cands = pool.filter(({fd}) => !pbExcl.has(fkey(fd))).slice(0, 12);
   chips(cands.map(({fd}) => fd), excluded);
+  peerTables(pool, met);
 
   charts.fran && charts.fran.destroy();
   charts.fran = new Chart(document.getElementById("chFranchise"), {
@@ -376,6 +494,11 @@ function renderPeer() {
       return v.length ? v[Math.floor(v.length / 2)] : null;
     });
   }
+  matrixTable("tbl-cohmed",
+    ["Median " + MET_LABEL[met] + " by cohort",
+     ...cohorts],
+    D.managers.filter(m => meds[m].some(v => v != null))
+      .map(m => [D.mgr_names[m] || m, ...meds[m]]));
   charts.coh && charts.coh.destroy();
   charts.coh = new Chart(document.getElementById("chCohort"), {
     type: "bar",
