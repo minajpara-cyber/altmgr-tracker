@@ -134,6 +134,29 @@
         the chosen bucket (funds ≥ 250m committed).</p></div>
   </div>
 
+  <h2>Aging of the book — NAV by fund age</h2>
+  <p class="chart-hint">Unrealized value (USD, ECB quarter-end FX) split by
+    fund age = report year minus vintage year. NAV stacking up in
+    <b>6–9 year</b> and especially <b>10y+</b> funds is capital that should
+    be getting returned — an aging book pressures future realized carry,
+    delays the LP re-up cycle, and signals exit-market dependence.
+    Combined vehicles reported without a vintage (~10% of NAV, e.g.
+    Tactical Opportunities "(Various)") are excluded from the age split;
+    coverage is what the managers themselves disclose.</p>
+  <div class="controls-row">
+    <label>Scope <select id="ag-scope">
+      <option value="all">All strategies</option>
+      <option value="pe">Private equity only (Buyout / Growth / Opportunistic)</option>
+    </select></label>
+  </div>
+  <div class="spon-row">
+    <div class="spon-chart"><canvas id="chAgingNav" height="250"></canvas>
+      <p class="chart-hint">Unrealized value by fund age, $bn (stacked).</p></div>
+    <div class="spon-chart"><canvas id="chAging10" height="250"></canvas>
+      <p class="chart-hint">Share of each manager's known-vintage NAV in
+        funds aged 10y+ — who is sitting on the oldest book.</p></div>
+  </div>
+
   <h2>Manager rollups</h2>
   <div class="spon-row">
     <div class="spon-chart"><canvas id="chUnrl" height="240"></canvas>
@@ -171,6 +194,6 @@
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-10"></script>
+<script src="./fundrecords.js?v=20260803-11"></script>
 </body>
 </html>

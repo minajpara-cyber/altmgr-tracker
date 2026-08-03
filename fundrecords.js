@@ -16,7 +16,7 @@ const fmtX = v => v == null ? "" : v.toFixed(2) + "x";
 if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
-  stats(); filters(); league(); watch(); trajectory(); peerBench(); rollups();
+  stats(); filters(); league(); watch(); trajectory(); peerBench(); agingNav(); rollups();
 });
 
 function stats() {
@@ -294,6 +294,46 @@ function renderPeer() {
     options: {animation: false, responsive: true,
       plugins: {legend: {position: "bottom"}},
       scales: {y: {ticks: {callback: v => v + "%"}}}},
+  });
+}
+
+function agingNav() {
+  document.getElementById("ag-scope")
+    .addEventListener("change", renderAging);
+  renderAging();
+
+  const s10 = D.aging.share10_by_mgr || {};
+  new Chart(document.getElementById("chAging10"), {
+    type: "line",
+    data: {labels: D.periods, datasets: Object.keys(s10)
+      .map(m => ({label: D.mgr_names[m] || m, data: s10[m],
+        borderColor: MGRC[m], backgroundColor: MGRC[m],
+        pointRadius: 0, borderWidth: 1.8, spanGaps: false}))},
+    options: {animation: false, responsive: true,
+      plugins: {legend: {position: "bottom"}},
+      scales: {x: {ticks: {maxTicksLimit: 12}},
+               y: {ticks: {callback: v => v + "%"}}}},
+  });
+}
+
+function renderAging() {
+  const a = D.aging[document.getElementById("ag-scope").value];
+  charts.aging && charts.aging.destroy();
+  const ds = [
+    ["Under 6 years", a.young, "#9ca3af"],
+    ["6–9 years", a.y6_9, "#b45309"],
+    ["10 years +", a.y10p, "#b91c1c"],
+  ].map(([label, data, col]) => ({label, data, borderColor: col,
+    backgroundColor: col + "bb", pointRadius: 0, borderWidth: 1,
+    fill: true, stack: "s", spanGaps: false}));
+  charts.aging = new Chart(document.getElementById("chAgingNav"), {
+    type: "line",
+    data: {labels: D.periods, datasets: ds},
+    options: {animation: false, responsive: true,
+      plugins: {legend: {position: "bottom"}},
+      scales: {x: {ticks: {maxTicksLimit: 12}},
+               y: {stacked: true,
+                   ticks: {callback: v => "$" + v + "bn"}}}},
   });
 }
 
