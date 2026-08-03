@@ -252,6 +252,19 @@ function trajectory() {
   mk("chRealPace", "rrate", v => v + "%");
 }
 
+let pbExcl = new Set(JSON.parse(localStorage.getItem("fr_excl") || "[]"));
+const fkey = f => f.m + "|" + (f.seg || "") + "|" + f.id;
+const MET_LABEL = {nirr: "Net IRR", girr: "Gross IRR",
+                   dpi: "DPI", moic: "MOIC"};
+const MET_PCT = {nirr: true, girr: true, dpi: false, moic: false};
+
+function fundMetricArr(fd, met) {
+  if (met === "moic")
+    return [fd.tmoic, fd.nmoic, fd.tvpi, fd.gmoic]
+      .find(a => a && a.some(v => v != null)) || fd.tmoic;
+  return fd[met];
+}
+
 function peerBench() {
   const bkt = document.getElementById("pb-bkt");
   (D.buckets || []).forEach(b => bkt.add(new Option(b, b)));
@@ -259,27 +272,76 @@ function peerBench() {
   const coh = document.getElementById("pb-coh");
   [...new Set(D.league.map(r => r.cohort).filter(Boolean))].sort()
     .forEach(c => coh.add(new Option(c, c)));
-  bkt.addEventListener("change", renderPeer);
-  coh.addEventListener("change", renderPeer);
+  ["pb-bkt", "pb-coh", "pb-met"].forEach(id =>
+    document.getElementById(id).addEventListener("change", renderPeer));
+  document.getElementById("pb-reset").addEventListener("click", () => {
+    pbExcl.clear();
+    localStorage.setItem("fr_excl", "[]");
+    renderPeer();
+  });
   renderPeer();
+}
+
+function chips(shown, excluded) {
+  const box = document.getElementById("pb-chips");
+  box.innerHTML = "";
+  const mk = (fd, off) => {
+    const el = document.createElement("span");
+    el.className = "badge";
+    el.style.cursor = "pointer";
+    el.style.marginLeft = "0";
+    el.style.marginRight = "8px";
+    if (off) {
+      el.style.opacity = "0.45";
+      el.style.textDecoration = "line-through";
+    } else {
+      el.style.borderColor = MGRC[fd.m];
+      el.style.color = MGRC[fd.m];
+    }
+    el.textContent = (D.mgr_names[fd.m] || fd.m) + " · " + fd.name
+      + (off ? "  +" : "  ✕");
+    el.title = off ? "click to restore" : "click to exclude";
+    el.addEventListener("click", () => {
+      const k = fkey(fd);
+      off ? pbExcl.delete(k) : pbExcl.add(k);
+      localStorage.setItem("fr_excl", JSON.stringify([...pbExcl]));
+      renderPeer();
+    });
+    box.appendChild(el);
+  };
+  shown.forEach(fd => mk(fd, false));
+  excluded.forEach(fd => mk(fd, true));
+  document.getElementById("pb-reset").style.display =
+    pbExcl.size ? "" : "none";
 }
 
 function renderPeer() {
   const b = document.getElementById("pb-bkt").value;
   const c = document.getElementById("pb-coh").value;
+  const met = document.getElementById("pb-met").value;
+  const fmt = MET_PCT[met] ? (v => v + "%") : (v => v + "x");
 
-  const cands = D.funds.filter(fd => fd.bkt === b
+  const usdc = {};  // rank sizes in USD — ¥/€ raw millions mustn't win
+  D.league.forEach(r => { usdc[fkey(r)] = r.usd_committed || 0; });
+  const pool = D.funds.filter(fd => fd.bkt === b
       && (!c || fd.cohort === c) && fd.vint
-      && fd.nirr.some(v => v != null))
-    .map(fd => ({fd, size: Math.max(...fd.committed.filter(v => v))}))
-    .sort((a, z) => z.size - a.size).slice(0, 12);
+      && (fundMetricArr(fd, met) || []).some(v => v != null))
+    .map(fd => ({fd, size: usdc[fkey(fd)]
+                 ?? Math.max(0, ...fd.committed.filter(v => v))}))
+    .sort((a, z) => z.size - a.size);
+  const excluded = pool.filter(({fd}) => pbExcl.has(fkey(fd)))
+    .map(({fd}) => fd);
+  const cands = pool.filter(({fd}) => !pbExcl.has(fkey(fd))).slice(0, 12);
+  chips(cands.map(({fd}) => fd), excluded);
+
   charts.fran && charts.fran.destroy();
   charts.fran = new Chart(document.getElementById("chFranchise"), {
     type: "line",
     data: {datasets: cands.map(({fd}) => {
       const v0 = parseInt(fd.vint) * 4 + 3;
+      const arr = fundMetricArr(fd, met) || [];
       const pts = [];
-      fd.nirr.forEach((v, i) => {
+      arr.forEach((v, i) => {
         if (v != null) pts.push({x: qnum(D.periods[fd.p0 + i]) - v0, y: v});
       });
       return {label: (D.mgr_names[fd.m] || fd.m) + " · " + fd.name,
@@ -289,21 +351,25 @@ function renderPeer() {
     })},
     options: {animation: false, responsive: true, parsing: false,
       plugins: {legend: {position: "bottom",
-                         labels: {boxWidth: 9, font: {size: 10}}}},
+                         labels: {boxWidth: 9, font: {size: 10}}},
+                title: {display: true, align: "start",
+                        text: MET_LABEL[met] + " vs fund age"}},
       scales: {x: {type: "linear",
                    title: {display: true,
                            text: "fund age (quarters since vintage)"}},
-               y: {ticks: {callback: v => v + "%"}}}},
+               y: {ticks: {callback: fmt}}}},
   });
 
+  const leagueVal = r => met === "moic" ? r.moic : r[met];
   const cohorts = [...new Set(D.league.filter(r => r.bkt === b)
     .map(r => r.cohort).filter(Boolean))].sort();
   const meds = {};
   for (const m of D.managers) {
     meds[m] = cohorts.map(ch => {
       const v = D.league.filter(r => r.m === m && r.bkt === b
-          && r.cohort === ch && r.nirr != null && (r.committed || 0) >= 250)
-        .map(r => r.nirr).sort((a, z) => a - z);
+          && r.cohort === ch && leagueVal(r) != null
+          && (r.committed || 0) >= 250 && !pbExcl.has(fkey(r)))
+        .map(leagueVal).sort((a, z) => a - z);
       return v.length ? v[Math.floor(v.length / 2)] : null;
     });
   }
@@ -315,8 +381,11 @@ function renderPeer() {
       .map(m => ({label: D.mgr_names[m] || m, data: meds[m],
         backgroundColor: MGRC[m] + "cc"}))},
     options: {animation: false, responsive: true,
-      plugins: {legend: {position: "bottom"}},
-      scales: {y: {ticks: {callback: v => v + "%"}}}},
+      plugins: {legend: {position: "bottom"},
+                title: {display: true, align: "start",
+                        text: "Median " + MET_LABEL[met] +
+                              " by vintage cohort"}},
+      scales: {y: {ticks: {callback: fmt}}}},
   });
 }
 

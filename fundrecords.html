@@ -145,7 +145,18 @@
     <div class="controls-row">
       <label>Strategy <select id="pb-bkt"></select></label>
       <label>Vintage <select id="pb-coh"><option value="">All</option></select></label>
+      <label>Metric <select id="pb-met">
+        <option value="nirr">Net IRR</option>
+        <option value="girr">Gross IRR</option>
+        <option value="dpi">DPI (realized ÷ invested)</option>
+        <option value="moic">MOIC (headline)</option>
+      </select></label>
+      <button id="pb-reset" class="badge" style="cursor:pointer; display:none">reset exclusions</button>
     </div>
+    <p class="chart-hint" id="pb-chips-hint">Click a fund chip to exclude it
+      from the comparison (the next-largest fund takes its place; medians
+      recompute). Exclusions persist in your browser.</p>
+    <div id="pb-chips" style="margin:2px 0 10px; line-height:2.1"></div>
     <div class="spon-row">
       <div class="spon-chart"><canvas id="chFranchise" height="250"></canvas>
         <p class="chart-hint">Net IRR vs fund age (quarters since vintage
@@ -203,6 +214,6 @@
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-13"></script>
+<script src="./fundrecords.js?v=20260803-15"></script>
 </body>
 </html>
