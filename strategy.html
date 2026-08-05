@@ -18,6 +18,7 @@
   .pill.strat-PE     { background: #2c9f3a; }
   .pill.strat-Infra  { background: #7b3f99; }
   .pill.strat-Partnership { background: #735600; }
+  .pill.strat-Listed { background: #8a1f1f; }
   .pill.mgr          { background: #4b5563; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
   .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
@@ -138,9 +139,11 @@
   const tToStrat   = new Map();
   const tToName    = new Map();
   // Public-private partnership vehicles (sub-advised; manager doesn't own the
-  // fund) get their OWN strategy bucket so they don't inflate the core
-  // Credit/PE/RE/Infra strategy totals.
-  const effStrat = (u) => u.category === 'Partnership' ? 'Partnership' : u.strategy;
+  // fund) and Listed vehicles (exchange-traded, e.g. BXDC) get their OWN
+  // strategy bucket so they don't inflate the core Credit/PE/RE/Infra
+  // strategy totals.
+  const effStrat = (u) => u.category === 'Partnership' ? 'Partnership'
+                        : u.category === 'Listed' ? 'Listed' : u.strategy;
   for (const u of universe) {
     tToSponsor.set(u.ticker, u.sponsor);
     tToStrat.set(u.ticker, effStrat(u));
