@@ -19,6 +19,7 @@
   .pill.strat-Infra  { background: #7b3f99; }
   .pill.strat-Partnership { background: #735600; }
   .pill.strat-Listed { background: #8a1f1f; }
+  .pill.strat-Feeder { background: #4b5563; }
   .pill.mgr          { background: #4b5563; }
   .tabulator-row.selected { background: rgba(31, 95, 166, 0.10) !important; }
   .chart-hint  { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 8px; }
@@ -35,6 +36,7 @@
     <a href="./manager.html">Manager</a>
     <a href="./strategy.html" class="active">Strategy</a>
     <a href="./monthly.html">Monthly</a>
+    <a href="./evergreen.html">Monthly Reports</a>
     <a href="./secondaries.html">GP Stakes</a>
     <a href="./fundrecords.html">Fund Records</a>
     <a href="./compare.html">Compare</a>
@@ -141,9 +143,11 @@
   // Public-private partnership vehicles (sub-advised; manager doesn't own the
   // fund) and Listed vehicles (exchange-traded, e.g. BXDC) get their OWN
   // strategy bucket so they don't inflate the core Credit/PE/RE/Infra
-  // strategy totals.
+  // strategy totals. Feeders (hold another tracked fund's shares, e.g.
+  // AUSPC -> ADS) likewise, or Credit would count that money twice.
   const effStrat = (u) => u.category === 'Partnership' ? 'Partnership'
-                        : u.category === 'Listed' ? 'Listed' : u.strategy;
+                        : u.category === 'Listed' ? 'Listed'
+                        : u.category === 'Feeder' ? 'Feeder' : u.strategy;
   for (const u of universe) {
     tToSponsor.set(u.ticker, u.sponsor);
     tToStrat.set(u.ticker, effStrat(u));

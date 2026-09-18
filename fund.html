@@ -15,6 +15,7 @@
     <a href="./manager.html">Manager</a>
     <a href="./strategy.html">Strategy</a>
     <a href="./monthly.html">Monthly</a>
+    <a href="./evergreen.html">Monthly Reports</a>
     <a href="./secondaries.html">GP Stakes</a>
     <a href="./fundrecords.html">Fund Records</a>
     <a href="./compare.html">Compare</a>
@@ -274,6 +275,12 @@
   // quarterly per-share return % computed from class I (the dominant class
   // for every multi-class fund in the universe).
   const SHARE_CLASSES = ['i', 's', 'd', 't', 'e'];
+  // The slots are generic buckets, so a fund whose class names fall outside
+  // that alphabet (OWLAC: I, I-F, U, U-F) publishes its real names here —
+  // otherwise Class I-F would be labelled "Class D". See
+  // CLASS_SLOTS_BY_TICKER in scripts/config.py.
+  const CLASS_LABELS = (data.class_labels || {})[ticker] || {};
+  const className = c => CLASS_LABELS[c] || c.toUpperCase();
   const hasPerShare = quarters.some(q =>
     SHARE_CLASSES.some(c =>
       q['nav_per_share_class_' + c] != null ||
@@ -294,7 +301,7 @@
     // NAV / share by class
     for (const c of classesWithData) {
       psRows.push({
-        label: `NAV / share — Class ${c.toUpperCase()}`,
+        label: `NAV / share — Class ${className(c)}`,
         key: 'nav_per_share_class_' + c,
         kind: 'usd',
       });
@@ -302,7 +309,7 @@
     // Shares outstanding by class
     for (const c of classesWithData) {
       psRows.push({
-        label: `Shares outstanding — Class ${c.toUpperCase()}`,
+        label: `Shares outstanding — Class ${className(c)}`,
         key: 'shares_outstanding_class_' + c,
         kind: 'int',
       });
@@ -320,7 +327,7 @@
       quarters.some(q => q['fh_reported_return_class_' + c] != null));
     for (const c of reportedClasses) {
       psRows.push({
-        label: `Reported total return (%) — Class ${c.toUpperCase()}`,
+        label: `Reported total return (%) — Class ${className(c)}`,
         key: 'fh_reported_return_class_' + c,
         kind: 'pctSigned',
       });
@@ -329,7 +336,7 @@
     // distribution per share), precomputed in 09_quarterize.py per class.
     for (const c of classesWithData) {
       psRows.push({
-        label: `Total return, derived (%) — Class ${c.toUpperCase()}`,
+        label: `Total return, derived (%) — Class ${className(c)}`,
         key: 'per_share_return_class_' + c,
         kind: 'pctSigned',
       });

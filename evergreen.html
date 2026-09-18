@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Monthly Report Tracker — Alt-Manager Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.4/dist/css/tabulator.min.css">
+<link rel="stylesheet" href="./style.css?v=20260803-1">
+<style>
+  .chart-hint { font-size: 12px; color: var(--muted, #6b7280); margin: 4px 0 10px; }
+  .controls-row { margin: 10px 0 14px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .controls-row label { font-family: var(--mono); font-size: 12px; }
+  .controls-row select { width: auto; min-width: 150px; }
+  .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 18px; line-height: 1.55; }
+  .egpills { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
+  .egpills button { font-family: var(--mono); font-size: 13px; padding: 7px 16px;
+    border: 1px solid var(--border, #d1d5db); background: transparent;
+    border-radius: 999px; cursor: pointer; color: inherit; }
+  .egpills button.active { background: var(--accent, #d58a16); color: #fff;
+    border-color: var(--accent, #d58a16); font-weight: 600; }
+  .egview { display: none; }
+  .egview.active { display: block; }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px;
+           padding: 1px 7px; border: 1px solid var(--border, #d1d5db);
+           border-radius: 9px; margin-left: 8px; vertical-align: 2px; }
+  .badge.warn { border-color: #d58a16; color: #8a5a00; background: #fff8ec; }
+  .eg-tbl { border-collapse: collapse; font-size: 12.5px;
+            font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .eg-tbl th { text-align: right; padding: 4px 10px; font-weight: 600;
+               color: var(--text-dim); border-bottom: 1px solid var(--border-strong); }
+  .eg-tbl th:first-child, .eg-tbl td:first-child { text-align: left; }
+  .eg-tbl td { text-align: right; padding: 3px 10px;
+               border-bottom: 1px solid var(--border); }
+  .eg-tbl tr:hover td { background: var(--row-hover); }
+  .scroller { overflow-x: auto; margin-bottom: 22px; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+  .zero { color: var(--text-faint); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">ALT-MANAGER <span class="accent">TRACKER</span></div>
+  <nav>
+    <a href="./index.html">Universe</a>
+    <a href="./manager.html">Manager</a>
+    <a href="./strategy.html">Strategy</a>
+    <a href="./monthly.html">Monthly</a>
+    <a href="./evergreen.html" class="active">Monthly Reports</a>
+    <a href="./secondaries.html">GP Stakes</a>
+    <a href="./fundrecords.html">Fund Records</a>
+    <a href="./compare.html">Compare</a>
+    <a href="./filings.html">Filings</a>
+  </nav>
+  <div class="meta" id="refresh-meta">Loading…</div>
+</header>
+
+<main>
+  <h1>Monthly report tracker</h1>
+  <p class="chart-hint">
+    Funds tracked from the manager's own monthly reports rather than from
+    EDGAR — open-ended private-markets vehicles that file nothing with the
+    SEC, so every figure here is read from the factsheets and audited reports
+    the manager publishes itself. The headline series is the
+    <b>implied net flow</b>: the month-on-month change in fund size that
+    performance does not explain, which is the closest thing these funds
+    disclose to a subscription/redemption number.
+  </p>
+
+  <div class="egpills" id="egpills">
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="fund">Fund detail</button>
+    <button data-view="classes">Share classes</button>
+    <button data-view="statements">Statements</button>
+  </div>
+
+  <section class="egview active" data-view="overview">
+    <div class="stat-row">
+      <div class="stat-card"><div class="label">Funds</div><div class="value" id="st-funds">…</div><div class="sub" id="st-funds-sub"></div></div>
+      <div class="stat-card"><div class="label">Monthly observations</div><div class="value" id="st-months">…</div><div class="sub" id="st-months-sub"></div></div>
+      <div class="stat-card"><div class="label">Earliest month</div><div class="value" id="st-earliest">…</div><div class="sub">across all funds</div></div>
+      <div class="stat-card headline"><div class="label">Latest month</div><div class="value" id="st-latest">…</div><div class="sub" id="st-latest-sub"></div></div>
+    </div>
+
+    <h2>The complex</h2>
+    <p class="chart-hint">
+      Latest published month per fund. Fund size and flows are in each fund's
+      own reporting currency and are never translated or summed across funds —
+      an FX move is not a flow.
+    </p>
+    <div class="scroller"><table class="eg-tbl" id="tbl-funds"></table></div>
+    <p class="footnote" id="fn-overview"></p>
+  </section>
+
+  <section class="egview" data-view="fund">
+    <div class="controls-row">
+      <label>Fund:
+        <select id="fund-pick"></select>
+      </label>
+      <label>Reporting currency:
+        <select id="ccy-pick"></select>
+      </label>
+    </div>
+    <h2 id="fd-title">…</h2>
+    <p class="chart-hint" id="fd-sub"></p>
+
+    <h2 class="section-title">Fund size and implied net flow</h2>
+    <p class="chart-hint">
+      Bars are the implied net flow for the month; the line is the fund size
+      printed on that month's factsheet. A month whose prior sheet could not
+      be read, or whose NAV moved more than 15%, carries a size but no flow.
+    </p>
+    <div class="chart-wrap" style="height:300px;margin:0 0 20px;"><canvas id="flowChart"></canvas></div>
+
+    <h2 class="section-title">NAV per share</h2>
+    <div class="chart-wrap" style="height:230px;margin:0 0 20px;"><canvas id="navpsChart"></canvas></div>
+
+    <h2 class="section-title">Monthly detail</h2>
+    <div class="scroller"><table class="eg-tbl" id="tbl-months"></table></div>
+    <p class="footnote">
+      Flow is derived, not disclosed:
+      <span class="mono">flow = (size − prior size) − prior size × NAV return</span>.
+      It is a <b>net</b> figure — subscriptions less redemptions less
+      distributions — and it inherits the rounding of the published numbers
+      (size to 0.01m, NAV to 0.01), so read the trend rather than any single
+      month. Audited annual subscription and redemption gross figures are on
+      the Statements tab.
+    </p>
+  </section>
+
+  <section class="egview" data-view="classes">
+    <h2>NAV per share by share class</h2>
+    <p class="chart-hint">
+      NAV per share for every share class named in the annual and semi-annual
+      reports. Classes differ by currency, fee load and hedging, so two rows
+      of the same fund are not comparable prices.
+    </p>
+    <div class="controls-row">
+      <label>Fund:
+        <select id="cls-fund-pick"></select>
+      </label>
+    </div>
+    <div class="scroller"><table class="eg-tbl" id="tbl-classes"></table></div>
+  </section>
+
+  <section class="egview" data-view="statements">
+    <h2>Audited statements</h2>
+    <p class="chart-hint">
+      Annual and semi-annual statement rows, in full units of each fund's own
+      reporting currency. These are the audited gross flows — the figures the
+      implied monthly series approximates between report dates.
+    </p>
+    <div class="scroller"><table class="eg-tbl" id="tbl-statements"></table></div>
+    <p class="footnote">
+      The Universe tab shows these same funds with their statements translated
+      to USD. The figures here are untranslated, so the two will differ by FX.
+    </p>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="./app.js?v=20260714-1"></script>
+<script src="./evergreen.js?v=20260918-1"></script>
+</body>
+</html>

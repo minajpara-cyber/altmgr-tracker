@@ -45,10 +45,49 @@ for (let i = 1; i < (filings.filings || []).length; i++) {
   check(filings.filings[i - 1].filing_date >= filings.filings[i].filing_date, 'Filings are not newest-first');
 }
 
+// Monthly report tracker (site/evergreen.json, built by scripts/37). Optional:
+// file is absent until that script has run, and its absence must not fail a
+// deploy of the EDGAR site. When it IS present, the invariants the tab relies
+// on are checked here so a broken payload never ships.
+let evergreenMonths = 0;
+const evergreenPath = path.join(root, 'evergreen.json');
+if (fs.existsSync(evergreenPath)) {
+  const eg = read('evergreen.json');
+  check((eg.funds || []).length > 0, 'Monthly-report payload has no funds');
+  const tickers = new Set((eg.funds || []).map(f => f.ticker));
+  check(tickers.size === (eg.funds || []).length, 'Monthly-report funds contain duplicate tickers');
+  for (const [ticker, segments] of Object.entries(eg.series || {})) {
+    check(tickers.has(ticker), `${ticker}: monthly-report series with no fund row`);
+    for (const seg of segments) {
+      const c = seg.cols;
+      const n = c.asof.length;
+      evergreenMonths += n;
+      // Parallel arrays must stay the same length or the page reads one
+      // month's flow against another month's size.
+      for (const [key, col] of Object.entries(c)) {
+        check(col.length === n, `${ticker} ${seg.ccy}: column ${key} is ${col.length}, expected ${n}`);
+      }
+      for (let i = 0; i < n; i++) {
+        check(!eg.data_through || c.asof[i] <= eg.data_through,
+          `${ticker} ${c.asof[i]}: month after the payload's own coverage date`);
+        // The published flow must be the published components' difference —
+        // the page prints all three side by side.
+        if (c.flow[i] != null && c.size_chg[i] != null && c.perf_effect[i] != null) {
+          check(Math.abs(c.flow[i] - (c.size_chg[i] - c.perf_effect[i])) <= 0.02,
+            `${ticker} ${c.asof[i]}: flow does not equal size change less performance effect`);
+        }
+      }
+      for (let i = 1; i < n; i++) {
+        check(c.asof[i - 1] < c.asof[i], `${ticker} ${seg.ccy}: months out of order at ${c.asof[i]}`);
+      }
+    }
+  }
+}
+
 if (failures.length) {
   console.error(`Data validation failed (${failures.length}):`);
   for (const message of failures.slice(0, 25)) console.error(`- ${message}`);
   process.exit(1);
 }
 
-console.log(`Data validation passed: ${core.universe.length} funds, ${core.quarters.length} quarterly rows, ${(monthly.monthly || []).length} monthly rows, ${(filings.filings || []).length} filings, ${Math.round(latestTotal / 1e6).toLocaleString()}M latest NAV.`);
+console.log(`Data validation passed: ${core.universe.length} funds, ${core.quarters.length} quarterly rows, ${(monthly.monthly || []).length} monthly rows, ${(filings.filings || []).length} filings, ${Math.round(latestTotal / 1e6).toLocaleString()}M latest NAV${evergreenMonths ? `, ${evergreenMonths} monthly-report months` : ''}.`);
