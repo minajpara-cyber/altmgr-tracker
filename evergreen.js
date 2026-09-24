@@ -89,7 +89,7 @@ function stats() {
   const wh = D.funds.reduce((a, f) => a + f.n_withheld_months, 0);
   document.getElementById("st-months").textContent = months.toLocaleString();
   document.getElementById("st-months-sub").textContent =
-    `${flows.toLocaleString()} with an implied flow`
+    `${flows.toLocaleString()} with a flow estimate`
     + (wh ? ` · ${wh} withheld` : "");
   document.getElementById("st-earliest").textContent =
     month(D.funds.reduce((a, f) => !a || f.first_month < a ? f.first_month : a, null));
@@ -100,7 +100,7 @@ function stats() {
 
 function overviewTable() {
   const head = ["Fund", "Strategy", "Ccy", "Latest", "NAV / share",
-                "Fund size", "Residual (mo)", "Residual (TTM)", "Return (TTM)",
+                "Fund size", "Flow est. (mo)", "Flow est. (TTM)", "Return (TTM)",
                 "Months", "From"];
   let h = "<tr>" + head.map(c => `<th>${c}</th>`).join("") + "</tr>";
   const rows = [...D.funds].sort((a, b) =>
@@ -111,8 +111,11 @@ function overviewTable() {
         + `cross-check rejected — a misparsed NAV or fund size. Withheld, not `
         + `charted.">${f.n_withheld_months} withheld</span>`
       : "";
+    const provisional = f.n_provisional_months
+      ? `<span class="badge provisional" title="User-supplied workbook history. Values and calculations were transcribed and reconciled, but the underlying manager publication has not yet been independently verified.">${f.n_provisional_months} provisional</span>`
+      : "";
     h += "<tr>"
-      + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}<div class="sub" `
+      + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}${provisional}<div class="sub" `
       + `style="font-size:11px;color:var(--text-faint)">${esc(f.legal_name || "")}</div></td>`
       + `<td style="text-align:left">${esc(f.strategy || "·")}</td>`
       + `<td style="text-align:left">${f.ccy || "·"}</td>`
@@ -141,8 +144,9 @@ function overviewTable() {
   const multi = D.funds.filter(f => f.currencies.length > 1);
   document.getElementById("fn-overview").innerHTML =
     `TTM figures require twelve consecutive calendar months with all inputs present. `
-    + `Residual (TTM) sums estimates; Return (TTM) compounds monthly returns. Both use the fund's `
-    + `current reporting currency.`
+    + `Flow estimate (TTM) sums monthly estimates; Return (TTM) compounds monthly returns. Both use the fund's `
+    + `current reporting currency. Provisional rows reproduce user-supplied workbook history; `
+    + `they are visibly labeled and remain separate from source-reviewed observations.`
     + (multi.length
       ? ` ${multi.length} fund${multi.length > 1 ? "s have" : " has"} reported `
         + `in more than one currency over time `
@@ -195,6 +199,7 @@ function renderFund() {
   const segs = segsOf(FUND);
   const seg = segs[SEG] || segs[0];
   const c = seg.cols, ccy = seg.ccy;
+  const hasWorkbookFlow = (c.flow_status || []).some(x => x === "provisional_workbook_flow");
 
   document.getElementById("fd-title").textContent =
     `${f.ticker} — ${f.legal_name || ""}`;
@@ -202,18 +207,21 @@ function renderFund() {
     ? ` · ${f.n_withheld_months} factsheet month`
       + `${f.n_withheld_months > 1 ? "s" : ""} withheld as unvalidated`
     : "";
+  const provisionalNote = f.n_provisional_months
+    ? ` · ${f.n_provisional_months} provisional workbook month${f.n_provisional_months > 1 ? "s" : ""}`
+    : "";
   document.getElementById("fd-sub").textContent =
     `${f.strategy || ""} · ${f.sponsor || ""}`
     + `${f.source ? ` · ${f.source}` : ""}`
     + ` · reporting in ${ccy}`
     + `${seg.lead_class ? ` (lead class ${seg.lead_class})` : ""}`
     + ` · ${c.asof.length} months, ${month(c.asof[0])} to `
-    + `${month(c.asof[c.asof.length - 1])}${withheldNote}`;
+    + `${month(c.asof[c.asof.length - 1])}${withheldNote}${provisionalNote}`;
 
   drawChart("flowChart", {
     labels: c.asof.map(month),
     datasets: [
-      {type: "bar", label: `Estimated NAV residual (${ccy}m)`, yAxisID: "y2",
+      {type: "bar", label: `${hasWorkbookFlow ? "Provisional / estimated flow" : "Estimated NAV residual"} (${ccy}m)`, yAxisID: "y2",
        data: c.flow,
        backgroundColor: c.flow.map(v => (v || 0) >= 0
          ? "rgba(11,107,50,0.45)" : "rgba(176,45,33,0.45)")},
@@ -269,8 +277,9 @@ function drawChart(id, data, scales) {
 
 function monthTable(seg) {
   const c = seg.cols, ccy = seg.ccy;
+  const hasWorkbookFlow = (c.flow_status || []).some(x => x === "provisional_workbook_flow");
   const head = ["Month", "NAV / share", "Return", "Fund size", "Size change",
-                "Performance effect", "NAV residual (est.)", "% of NAV"];
+                "Performance effect", hasWorkbookFlow ? "Flow estimate" : "NAV residual (est.)", "% of NAV"];
   const reviewed = (c.flow_status || []).some(Boolean);
   if (reviewed) head.push("External capital flow (est.)", "Sources & qualification");
   let h = "<tr>" + head.map(x => `<th>${x}</th>`).join("") + "</tr>";
@@ -288,6 +297,7 @@ function monthTable(seg) {
       + (reviewed ? `<td>${moneySigned((c.capital_flow_m || [])[i], ccy)}</td>`
         + `<td class="review-cell">${link((c.source_url || [])[i], "NAV source")}`
         + ((c.return_source_url || [])[i] ? ` · ${link(c.return_source_url[i], "Return source")}` : "")
+        + ((c.review_status || [])[i] === "provisional" ? ` <span class="badge provisional">provisional workbook</span>` : "")
         + `<div>${esc((c.flow_note || [])[i] || "No estimate")}</div></td>` : "")
       + "</tr>";
   }
@@ -315,6 +325,7 @@ function renderWatchlist() {
   const noun = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
   document.getElementById("watch-summary").textContent = all.length
     ? `${funds.length} of ${all.length} watchlist entries · ${noun(coverage.n_approved || 0, "source-reviewed observation")} · `
+      + `${noun(coverage.n_provisional || 0, "provisional workbook observation")} · `
       + `${noun(coverage.n_pending || 0, "observation")} pending review · ${noun(coverage.n_residuals || 0, "estimated NAV residual")} · `
       + `${noun(coverage.n_capital_flow_estimates || 0, "estimated external capital flow")}. `
       + "Blank estimates mean inputs are missing or incompatible—not zero flows."
@@ -344,8 +355,9 @@ function renderWatchlist() {
     html += `<tr><td><div>${esc(managerName(f.manager))}</div><b>${esc(f.ticker)}</b>`
       + `<div class="review-cell">${esc(f.name)}</div><div class="chart-hint">${esc(f.market || "")}</div></td>`
       + `<td class="review-cell">${notes.length ? [...new Set(notes)].map(esc).join("<br>") : "Awaiting source review"}</td>`
-      + `<td>${esc(month(f.latest_report_month))}</td><td>${esc(month(f.latest_reviewed_month))}`
+      + `<td>${esc(month(f.latest_report_month))}</td><td>${esc(month(f.latest_published_month || f.latest_reviewed_month))}`
       + `<div class="chart-hint">${f.n_reviewed || 0} reviewed`
+      + `${f.n_provisional ? ` · ${f.n_provisional} provisional` : ""}`
       + `${f.n_pending ? ` · ${f.n_pending} pending` : ""}</div></td>`
       + `<td class="review-cell">${sources || "Source discovery needed"}</td></tr>`;
   }

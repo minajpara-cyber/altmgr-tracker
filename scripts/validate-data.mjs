@@ -76,8 +76,18 @@ if (fs.existsSync(evergreenPath)) {
         // The published flow must be the published components' difference —
         // the page prints all three side by side.
         if (c.flow[i] != null && c.size_chg[i] != null && c.perf_effect[i] != null) {
-          check(Math.abs(c.flow[i] - (c.size_chg[i] - c.perf_effect[i])) <= 0.02,
-            `${ticker} ${c.asof[i]}: flow does not equal size change less performance effect`);
+          if ((c.flow_status || [])[i] === 'provisional_workbook_flow') {
+            check((c.review_status || [])[i] === 'provisional'
+              && (c.source_kind || [])[i] === 'user_supplied_workbook_photo',
+            `${ticker} ${c.asof[i]}: provisional workbook flow lacks provisional photo provenance`);
+            check(Math.abs(c.flow[i] - (c.workbook_flow_m || [])[i]) <= 0.02,
+              `${ticker} ${c.asof[i]}: provisional flow differs from photographed workbook flow`);
+            check((c.workbook_reconciliation_delta_m || [])[i] != null,
+              `${ticker} ${c.asof[i]}: provisional workbook flow lacks a rounding reconciliation`);
+          } else {
+            check(Math.abs(c.flow[i] - (c.size_chg[i] - c.perf_effect[i])) <= 0.02,
+              `${ticker} ${c.asof[i]}: flow does not equal size change less performance effect`);
+          }
         }
       }
       for (let i = 1; i < n; i++) {
