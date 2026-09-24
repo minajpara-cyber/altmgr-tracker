@@ -35,7 +35,8 @@ const link = (url, label) => {
     return `<a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
   } catch (_) { return esc(label); }
 };
-const managerName = key => ({hamilton_lane: "Hamilton Lane", carlyle: "Carlyle", stepstone: "StepStone"}[key] || key);
+const managerName = key => ({partners_group: "Partners Group", hamilton_lane: "Hamilton Lane",
+  carlyle: "Carlyle", stepstone: "StepStone"}[key] || key);
 
 const fundOf = t => D.funds.find(f => f.ticker === t);
 // Segments long enough to be a real reporting-currency era. The payload keeps
@@ -59,9 +60,12 @@ fetch("./evergreen.json", {cache: "no-store"})
   })
   .then(d => {
     D = d;
-    meta(); stats(); overviewTable(); initPickers(); initViews();
+    meta(); stats(); initMatrix(); overviewTable(); initPickers(); initViews();
     initWatchlist(); renderFund(); renderClasses(); renderStatements();
-    if (location.hash === "#watchlist") showView("watchlist");
+    const requestedView = location.hash.slice(1);
+    if (["tracker", "overview", "watchlist", "fund", "classes", "statements"].includes(requestedView)) {
+      showView(requestedView);
+    }
   })
   .catch(e => {
     document.body.insertAdjacentHTML("afterbegin",
@@ -96,6 +100,105 @@ function stats() {
   document.getElementById("st-latest").textContent = month(D.data_through);
   document.getElementById("st-latest-sub").textContent =
     `${latest} of ${D.funds.length} funds current`;
+}
+
+function managerKey(f) {
+  const source = (f.source || "").toLowerCase();
+  if (source.includes("partners group")) return "partners_group";
+  if (source.includes("hamilton lane")) return "hamilton_lane";
+  if (source.includes("carlyle")) return "carlyle";
+  if (source.includes("stepstone")) return "stepstone";
+  return source || "other";
+}
+
+function matrixMonths(limit) {
+  const all = [...new Set(Object.values(D.series || {}).flatMap(segments =>
+    segments.flatMap(seg => seg.cols.asof || [])))].sort();
+  return limit === "all" ? all : all.slice(-Number(limit));
+}
+
+function matrixCell(value, metric, seg, i) {
+  const c = seg.cols, ccy = seg.ccy;
+  let formatted = "·", valueClass = "";
+  if (metric === "size") formatted = money(value, ccy);
+  else if (metric === "ret") { formatted = pctSigned(value); valueClass = cls(value); }
+  else if (metric === "flow") { formatted = moneySigned(value, ccy); valueClass = cls(value); }
+  else if (metric === "flow_pct") { formatted = pctSigned(value); valueClass = cls(value); }
+  else if (metric === "navps") formatted = value == null ? "·" : sym(ccy) + num(value);
+  const provisional = (c.review_status || [])[i] === "provisional";
+  const status = provisional ? "Provisional workbook" : "Source-reviewed / published";
+  const note = metric === "flow" ? (c.flow_note || [])[i] : "";
+  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}`;
+  const classes = [valueClass, provisional ? "matrix-provisional" : "", value == null ? "matrix-missing" : ""]
+    .filter(Boolean).join(" ");
+  return `<td class="${classes}" title="${esc(title)}">${formatted}</td>`;
+}
+
+function initMatrix() {
+  const managerPick = document.getElementById("matrix-manager");
+  const managers = [...new Set(D.funds.map(managerKey))].sort((a, b) =>
+    managerName(a).localeCompare(managerName(b)));
+  for (const key of managers) {
+    const opt = document.createElement("option");
+    opt.value = key; opt.textContent = managerName(key); managerPick.append(opt);
+  }
+  managerPick.addEventListener("change", renderMatrix);
+  document.getElementById("matrix-range").addEventListener("change", renderMatrix);
+  document.getElementById("matrix-search").addEventListener("input", renderMatrix);
+  document.getElementById("matrix-latest").addEventListener("click", scrollMatrixLatest);
+  renderMatrix();
+}
+
+function scrollMatrixLatest() {
+  const wrap = document.getElementById("matrix-wrap");
+  wrap.scrollLeft = wrap.scrollWidth;
+}
+
+function renderMatrix() {
+  const manager = document.getElementById("matrix-manager").value;
+  const search = document.getElementById("matrix-search").value.trim().toLowerCase();
+  const months = matrixMonths(document.getElementById("matrix-range").value);
+  const blocks = D.funds.flatMap(f => segsOf(f.ticker).map(seg => ({f, seg, manager: managerKey(f)})))
+    .filter(x => (!manager || x.manager === manager)
+      && `${x.f.ticker} ${x.f.legal_name || ""} ${managerName(x.manager)}`.toLowerCase().includes(search))
+    .sort((a, b) => managerName(a.manager).localeCompare(managerName(b.manager))
+      || a.f.ticker.localeCompare(b.f.ticker) || a.seg.ccy.localeCompare(b.seg.ccy));
+  const head = `<thead><tr><th class="matrix-fund-head">Fund</th><th class="matrix-metric-head">KPI</th>`
+    + months.map(m => `<th class="matrix-date" title="${esc(m)}">${month(m)}</th>`).join("") + "</tr></thead>";
+  let body = "<tbody>";
+  for (const {f, seg, manager: managerKeyValue} of blocks) {
+    const byMonth = new Map((seg.cols.asof || []).map((asof, i) => [asof, i]));
+    const sizeLabel = (seg.cols.nav_measure || []).some(x => x === "unverified_nav_or_aum")
+      ? "NAV / AUM*" : "Fund NAV";
+    const metrics = [
+      ["size", sizeLabel], ["ret", "Performance"], ["flow", "Implied flow"],
+      ["flow_pct", "Flow / NAV"], ["navps", "NAV / share"],
+    ];
+    metrics.forEach(([field, label], rowIndex) => {
+      body += `<tr${rowIndex === 0 ? ' class="matrix-fund-start"' : ""}>`;
+      if (rowIndex === 0) {
+        const provisional = f.n_provisional_months
+          ? `<span class="badge provisional">${f.n_provisional_months} provisional</span>` : "";
+        body += `<td class="matrix-fund-cell" rowspan="${metrics.length}">`
+          + `<span class="matrix-manager">${esc(managerName(managerKeyValue))}</span>`
+          + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${provisional}`
+          + `<span class="matrix-fund-name">${esc(f.legal_name || "")}</span></td>`;
+      }
+      body += `<th class="matrix-metric-cell" scope="row">${label}</th>`;
+      for (const m of months) {
+        const i = byMonth.get(m);
+        body += i == null ? '<td class="matrix-missing" title="No observation">·</td>'
+          : matrixCell((seg.cols[field] || [])[i], field, seg, i);
+      }
+      body += "</tr>";
+    });
+  }
+  body += blocks.length ? "</tbody>" : `<tr><td colspan="${months.length + 2}">No funds match these filters.</td></tr></tbody>`;
+  document.getElementById("tbl-matrix").innerHTML = head + body;
+  document.getElementById("matrix-summary").textContent = blocks.length
+    ? `${blocks.length} fund / currency series · ${months.length} sequential month-ends · oldest to newest`
+    : "No fund series match these filters.";
+  requestAnimationFrame(scrollMatrixLatest);
 }
 
 function overviewTable() {
@@ -436,6 +539,7 @@ function showView(name) {
   for (const s of document.querySelectorAll(".egview")) {
     s.classList.toggle("active", s.dataset.view === name);
   }
+  location.hash = name === "tracker" ? "" : name;
   // Chart.js sizes to a hidden container as zero; re-measure once visible.
   for (const c of Object.values(charts)) c.resize();
 }

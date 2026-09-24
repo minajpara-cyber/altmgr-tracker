@@ -42,6 +42,44 @@
   .watch-tbl td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
   .watch-tbl td:nth-child(2), .watch-tbl td:last-child { text-align: left; }
   .watch-note { border-left: 3px solid var(--accent, #d58a16); padding: 10px 14px; background: var(--row-hover); line-height: 1.6; }
+  .matrix-controls { justify-content: space-between; margin-bottom: 10px; }
+  .matrix-control-group { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .matrix-control-group button { font-family: var(--mono); font-size: 13px; padding: 6px 12px;
+    border: 1px solid var(--border-strong); background: var(--surface, #fff); color: inherit;
+    border-radius: 4px; cursor: pointer; }
+  .matrix-wrap { max-height: 68vh; overflow: auto; border: 1px solid var(--border-strong);
+    background: var(--surface, #fff); margin-bottom: 10px; overscroll-behavior: contain; }
+  .matrix-tbl { border-collapse: separate; border-spacing: 0; min-width: 100%; width: max-content;
+    font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .matrix-tbl th, .matrix-tbl td { height: 34px; padding: 6px 10px; border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border); text-align: right; background: var(--surface, #fff); }
+  .matrix-tbl thead th { position: sticky; top: 0; z-index: 5; background: var(--bg, #f7f8fa);
+    color: var(--text-dim); font-weight: 600; box-shadow: 0 1px 0 var(--border-strong); }
+  .matrix-tbl .matrix-fund-head, .matrix-tbl .matrix-fund-cell { position: sticky; left: 0; z-index: 4;
+    width: 220px; min-width: 220px; max-width: 220px; text-align: left; }
+  .matrix-tbl .matrix-metric-head, .matrix-tbl .matrix-metric-cell { position: sticky; left: 220px; z-index: 4;
+    width: 132px; min-width: 132px; max-width: 132px; text-align: left; box-shadow: 1px 0 0 var(--border-strong); }
+  .matrix-tbl thead .matrix-fund-head, .matrix-tbl thead .matrix-metric-head { z-index: 7; background: var(--bg, #f7f8fa); }
+  .matrix-tbl .matrix-fund-cell { vertical-align: top; padding-top: 10px; white-space: normal; line-height: 1.35; }
+  .matrix-fund-name { display: block; color: var(--text-faint); font-size: 12px; margin-top: 3px; }
+  .matrix-tbl .matrix-metric-cell { font-weight: 500; color: var(--text-dim); }
+  .matrix-tbl .matrix-date { min-width: 96px; text-align: right; }
+  .matrix-tbl tr.matrix-fund-start > * { border-top: 1px solid var(--border-strong); }
+  .matrix-tbl tbody tr:hover td, .matrix-tbl tbody tr:hover th { background: var(--row-hover); }
+  .matrix-tbl td.matrix-provisional { background: #fff8ec; }
+  .matrix-tbl td.matrix-missing { color: var(--text-faint); }
+  .matrix-manager { display: block; color: var(--text-faint); font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  .matrix-legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .matrix-key { display: inline-flex; gap: 6px; align-items: center; }
+  .matrix-swatch { width: 11px; height: 11px; border: 1px solid var(--border-strong); background: var(--surface, #fff); }
+  .matrix-swatch.provisional { background: #fff8ec; border-color: #d58a16; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  @media (max-width: 700px) {
+    .matrix-tbl .matrix-fund-head, .matrix-tbl .matrix-fund-cell { width: 160px; min-width: 160px; max-width: 160px; }
+    .matrix-tbl .matrix-metric-head, .matrix-tbl .matrix-metric-cell { left: 160px; width: 112px; min-width: 112px; max-width: 112px; }
+  }
 </style>
 </head>
 <body>
@@ -72,14 +110,47 @@
   </p>
 
   <div class="egpills" id="egpills">
-    <button data-view="overview" class="active">Overview</button>
+    <button data-view="tracker" class="active">Monthly tracker</button>
+    <button data-view="overview">Overview</button>
     <button data-view="watchlist">Source watchlist</button>
     <button data-view="fund">Fund detail</button>
     <button data-view="classes">Share classes</button>
     <button data-view="statements">Statements</button>
   </div>
 
-  <section class="egview active" data-view="overview">
+  <section class="egview active" data-view="tracker">
+    <div class="controls-row matrix-controls">
+      <div class="matrix-control-group">
+        <label>Manager: <select id="matrix-manager"><option value="">All managers</option></select></label>
+        <label>History:
+          <select id="matrix-range">
+            <option value="12">Last 12 months</option>
+            <option value="24" selected>Last 24 months</option>
+            <option value="36">Last 36 months</option>
+            <option value="all">All history</option>
+          </select>
+        </label>
+        <label>Find a fund: <input id="matrix-search" type="search" placeholder="Fund name or ticker" aria-label="Find a fund in the monthly tracker"></label>
+      </div>
+      <div class="matrix-control-group">
+        <button type="button" id="matrix-latest">Jump to latest</button>
+      </div>
+    </div>
+    <p class="chart-hint" id="matrix-summary"></p>
+    <div class="matrix-wrap" id="matrix-wrap">
+      <table class="matrix-tbl" id="tbl-matrix">
+        <caption class="sr-only">Sequential monthly fund KPI tracker</caption>
+      </table>
+    </div>
+    <p class="footnote matrix-legend">
+      <span class="matrix-key"><span class="matrix-swatch"></span>Source-reviewed or published series</span>
+      <span class="matrix-key"><span class="matrix-swatch provisional"></span>Reviewed transcription from user-supplied workbook images; underlying publication not independently verified</span>
+      <span>NAV / AUM* means the supplied workbook did not independently establish that the reported size is total net assets.</span>
+      <span>· means unavailable—not zero. Each fund remains in its own reporting currency.</span>
+    </p>
+  </section>
+
+  <section class="egview" data-view="overview">
     <div class="stat-row">
       <div class="stat-card"><div class="label">Funds</div><div class="value" id="st-funds">…</div><div class="sub" id="st-funds-sub"></div></div>
       <div class="stat-card"><div class="label">Monthly observations</div><div class="value" id="st-months">…</div><div class="sub" id="st-months-sub"></div></div>
@@ -176,6 +247,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./evergreen.js?v=20260922-1"></script>
+<script src="./evergreen.js?v=20260924-2"></script>
 </body>
 </html>
