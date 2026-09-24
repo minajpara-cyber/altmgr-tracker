@@ -32,7 +32,10 @@ for (const q of core.quarters) {
   }
 }
 for (const rows of grouped.values()) rows.sort((a,b) => qKey(a.quarter_label) - qKey(b.quarter_label));
-for (const u of core.universe) check(grouped.has(u.ticker), `${u.ticker}: no quarterly data`);
+for (const u of core.universe) {
+  check(grouped.has(u.ticker) || u.awaiting_first_financial_report === true,
+    `${u.ticker}: no quarterly data and not marked as awaiting its first financial report`);
+}
 
 const latestTotal = [...grouped.values()].reduce((sum, rows) => sum + (nav(rows.at(-1)) || 0), 0);
 check(latestTotal > 0, 'Latest universe NAV total is zero');

@@ -37,6 +37,10 @@
   .pos { color: var(--pos); }
   .neg { color: var(--neg); }
   .zero { color: var(--text-faint); }
+  .review-cell { white-space: normal; min-width: 260px; max-width: 480px; text-align: left !important; line-height: 1.5; }
+  .watch-tbl td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+  .watch-tbl td:nth-child(2), .watch-tbl td:last-child { text-align: left; }
+  .watch-note { border-left: 3px solid var(--accent, #d58a16); padding: 10px 14px; background: var(--row-hover); line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -59,17 +63,15 @@
 <main>
   <h1>Monthly report tracker</h1>
   <p class="chart-hint">
-    Funds tracked from the manager's own monthly reports rather than from
-    EDGAR — open-ended private-markets vehicles that file nothing with the
-    SEC, so every figure here is read from the factsheets and audited reports
-    the manager publishes itself. The headline series is the
-    <b>implied net flow</b>: the month-on-month change in fund size that
-    performance does not explain, which is the closest thing these funds
-    disclose to a subscription/redemption number.
+    Monthly factsheets, manager publications and supporting filings, alongside
+    the Partners Group history. Estimated NAV residuals separate fund-size growth
+    from reported performance; they are not disclosed subscriptions or redemptions.
+    The source watchlist tracks publication coverage and the inputs still needed.
   </p>
 
   <div class="egpills" id="egpills">
     <button data-view="overview" class="active">Overview</button>
+    <button data-view="watchlist">Source watchlist</button>
     <button data-view="fund">Fund detail</button>
     <button data-view="classes">Share classes</button>
     <button data-view="statements">Statements</button>
@@ -93,6 +95,20 @@
     <p class="footnote" id="fn-overview"></p>
   </section>
 
+  <section class="egview" data-view="watchlist">
+    <h2>Manual publication watchlist</h2>
+    <p class="chart-hint">Hamilton Lane · Carlyle · StepStone. Initial coverage, not a certified complete universe.
+      Publication checks and data approval are separate: a changed document is a review task, not an accepted update.</p>
+    <div class="controls-row">
+      <label>Manager: <select id="watch-manager"><option value="">All managers</option></select></label>
+      <label>Find a fund: <input id="watch-search" type="search" placeholder="Fund name or ticker" aria-label="Find a fund"></label>
+    </div>
+    <p id="watch-summary" class="watch-note"></p>
+    <div class="scroller"><table class="eg-tbl watch-tbl" id="tbl-watchlist"></table></div>
+    <p class="footnote">No scheduled monitoring is enabled. Reporting dates are not retrieval dates; an unchanged page is not proof that no newer report exists.
+      Some archives require a browser or authorized investor access. Feeder, master and parallel vehicles are not summed.</p>
+  </section>
+
   <section class="egview" data-view="fund">
     <div class="controls-row">
       <label>Fund:
@@ -105,11 +121,10 @@
     <h2 id="fd-title">…</h2>
     <p class="chart-hint" id="fd-sub"></p>
 
-    <h2 class="section-title">Fund size and implied net flow</h2>
+    <h2 class="section-title">Fund size and estimated NAV residual</h2>
     <p class="chart-hint">
-      Bars are the implied net flow for the month; the line is the fund size
-      printed on that month's factsheet. A month whose prior sheet could not
-      be read, or whose NAV moved more than 15%, carries a size but no flow.
+      Bars show the estimated NAV residual; the line shows published fund size.
+      Missing, incompatible or unreviewed inputs leave the estimate blank, not zero.
     </p>
     <div class="chart-wrap" style="height:300px;margin:0 0 20px;"><canvas id="flowChart"></canvas></div>
 
@@ -119,13 +134,11 @@
     <h2 class="section-title">Monthly detail</h2>
     <div class="scroller"><table class="eg-tbl" id="tbl-months"></table></div>
     <p class="footnote">
-      Flow is derived, not disclosed:
-      <span class="mono">flow = (size − prior size) − prior size × NAV return</span>.
-      It is a <b>net</b> figure — subscriptions less redemptions less
-      distributions — and it inherits the rounding of the published numbers
-      (size to 0.01m, NAV to 0.01), so read the trend rather than any single
-      month. Audited annual subscription and redemption gross figures are on
-      the Statements tab.
+      <span class="mono">NAV residual = closing NAV − opening NAV × (1 + monthly return) − other NAV changes</span>.
+      It assumes month-end capital flows. Cash distributions, reinvestment, share-class fees,
+      rounding and capital timing can affect the result. New manager series show estimated external net capital
+      flow only when cash distributions net of reinvestment are verified. Class returns are labeled proxies;
+      source-specific qualifications appear beside each observation. Audited gross flows remain on Statements.
     </p>
   </section>
 
@@ -161,6 +174,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./evergreen.js?v=20260918-1"></script>
+<script src="./evergreen.js?v=20260922-1"></script>
 </body>
 </html>

@@ -26,6 +26,16 @@ const pctSigned = (v, dp = 2) => v == null ? "·"
   : (v >= 0 ? "+" : "−") + num(Math.abs(v), dp) + "%";
 const cls = v => v == null ? "zero" : v > 0 ? "pos" : v < 0 ? "neg" : "zero";
 const month = d => d ? d.slice(0, 7) : "·";
+const esc = value => String(value ?? "").replace(/[&<>"']/g, ch =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[ch]));
+const link = (url, label) => {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.username || u.password) return esc(label);
+    return `<a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+  } catch (_) { return esc(label); }
+};
+const managerName = key => ({hamilton_lane: "Hamilton Lane", carlyle: "Carlyle", stepstone: "StepStone"}[key] || key);
 
 const fundOf = t => D.funds.find(f => f.ticker === t);
 // Segments long enough to be a real reporting-currency era. The payload keeps
@@ -33,7 +43,7 @@ const fundOf = t => D.funds.find(f => f.ticker === t);
 // A brand-new fund can have only short ones; show them rather than nothing.
 const segsOf = t => {
   const all = D.series[t] || [];
-  const long = all.filter(s => s.cols.asof.length >= D.min_segment_months);
+  const long = all.filter(s => s.reviewed || s.cols.asof.length >= D.min_segment_months);
   return long.length ? long : all;
 };
 
@@ -50,11 +60,12 @@ fetch("./evergreen.json", {cache: "no-store"})
   .then(d => {
     D = d;
     meta(); stats(); overviewTable(); initPickers(); initViews();
-    renderFund(); renderClasses(); renderStatements();
+    initWatchlist(); renderFund(); renderClasses(); renderStatements();
+    if (location.hash === "#watchlist") showView("watchlist");
   })
   .catch(e => {
     document.body.insertAdjacentHTML("afterbegin",
-      `<div class="error-msg">Failed to load evergreen.json: ${e.message}. ` +
+      `<div class="error-msg">Failed to load evergreen.json: ${esc(e.message)}. ` +
       `Run <code>python3 scripts/37_build_evergreen_site.py</code> to build it.</div>`);
   });
 
@@ -89,7 +100,7 @@ function stats() {
 
 function overviewTable() {
   const head = ["Fund", "Strategy", "Ccy", "Latest", "NAV / share",
-                "Fund size", "Flow (mo)", "Flow (TTM)", "Return (TTM)",
+                "Fund size", "Residual (mo)", "Residual (TTM)", "Return (TTM)",
                 "Months", "From"];
   let h = "<tr>" + head.map(c => `<th>${c}</th>`).join("") + "</tr>";
   const rows = [...D.funds].sort((a, b) =>
@@ -101,9 +112,9 @@ function overviewTable() {
         + `charted.">${f.n_withheld_months} withheld</span>`
       : "";
     h += "<tr>"
-      + `<td><a href="#" data-goto="${f.ticker}">${f.ticker}</a>${withheld}<div class="sub" `
-      + `style="font-size:11px;color:var(--text-faint)">${f.legal_name || ""}</div></td>`
-      + `<td style="text-align:left">${f.strategy || "·"}</td>`
+      + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}<div class="sub" `
+      + `style="font-size:11px;color:var(--text-faint)">${esc(f.legal_name || "")}</div></td>`
+      + `<td style="text-align:left">${esc(f.strategy || "·")}</td>`
       + `<td style="text-align:left">${f.ccy || "·"}</td>`
       + `<td>${month(f.latest_month)}</td>`
       + `<td>${f.latest_navps == null ? "·" : sym(f.ccy) + num(f.latest_navps)}</td>`
@@ -129,9 +140,8 @@ function overviewTable() {
 
   const multi = D.funds.filter(f => f.currencies.length > 1);
   document.getElementById("fn-overview").innerHTML =
-    `Flow (TTM) sums the last twelve months that carry a flow, and is shown `
-    + `only where at least six of them do. Return (TTM) compounds the same `
-    + `window's monthly NAV returns. Both are computed within the fund's `
+    `TTM figures require twelve consecutive calendar months with all inputs present. `
+    + `Residual (TTM) sums estimates; Return (TTM) compounds monthly returns. Both use the fund's `
     + `current reporting currency.`
     + (multi.length
       ? ` ${multi.length} fund${multi.length > 1 ? "s have" : " has"} reported `
@@ -144,7 +154,7 @@ function overviewTable() {
 
 function initPickers() {
   const opts = D.funds.map(f =>
-    `<option value="${f.ticker}">${f.ticker} — ${f.legal_name || ""}</option>`).join("");
+    `<option value="${esc(f.ticker)}">${esc(f.ticker)} — ${esc(f.legal_name || "")}</option>`).join("");
   const fp = document.getElementById("fund-pick");
   const cp = document.getElementById("cls-fund-pick");
   fp.innerHTML = opts;
@@ -154,7 +164,7 @@ function initPickers() {
   fp.value = FUND;
   cp.innerHTML = D.funds
     .filter(f => (D.pershare[f.ticker] || []).length)
-    .map(f => `<option value="${f.ticker}">${f.ticker} — ${f.legal_name || ""}</option>`)
+    .map(f => `<option value="${esc(f.ticker)}">${esc(f.ticker)} — ${esc(f.legal_name || "")}</option>`)
     .join("");
   paintCcyPicker();
 
@@ -203,7 +213,7 @@ function renderFund() {
   drawChart("flowChart", {
     labels: c.asof.map(month),
     datasets: [
-      {type: "bar", label: `Implied net flow (${ccy}m)`, yAxisID: "y2",
+      {type: "bar", label: `Estimated NAV residual (${ccy}m)`, yAxisID: "y2",
        data: c.flow,
        backgroundColor: c.flow.map(v => (v || 0) >= 0
          ? "rgba(11,107,50,0.45)" : "rgba(176,45,33,0.45)")},
@@ -234,6 +244,15 @@ function renderFund() {
 }
 
 function drawChart(id, data, scales) {
+  if (typeof Chart === "undefined") {
+    const canvas = document.getElementById(id);
+    if (!canvas.parentElement.querySelector(".chart-hint")) {
+      const note = document.createElement("p"); note.className = "chart-hint";
+      note.textContent = "Chart library unavailable. All observations remain available in the table below.";
+      canvas.parentElement.prepend(note);
+    }
+    return;
+  }
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(document.getElementById(id).getContext("2d"), {
     data,
@@ -251,7 +270,9 @@ function drawChart(id, data, scales) {
 function monthTable(seg) {
   const c = seg.cols, ccy = seg.ccy;
   const head = ["Month", "NAV / share", "Return", "Fund size", "Size change",
-                "Performance effect", "Implied net flow", "% of NAV"];
+                "Performance effect", "NAV residual (est.)", "% of NAV"];
+  const reviewed = (c.flow_status || []).some(Boolean);
+  if (reviewed) head.push("External capital flow (est.)", "Sources & qualification");
   let h = "<tr>" + head.map(x => `<th>${x}</th>`).join("") + "</tr>";
   // Newest first: the recent months are what a reader checks.
   for (let i = c.asof.length - 1; i >= 0; i--) {
@@ -264,9 +285,72 @@ function monthTable(seg) {
       + `<td class="${cls(c.perf_effect[i])}">${moneySigned(c.perf_effect[i], ccy)}</td>`
       + `<td class="${cls(c.flow[i])}"><b>${moneySigned(c.flow[i], ccy)}</b></td>`
       + `<td class="${cls(c.flow_pct[i])}">${pctSigned(c.flow_pct[i])}</td>`
+      + (reviewed ? `<td>${moneySigned((c.capital_flow_m || [])[i], ccy)}</td>`
+        + `<td class="review-cell">${link((c.source_url || [])[i], "NAV source")}`
+        + ((c.return_source_url || [])[i] ? ` · ${link(c.return_source_url[i], "Return source")}` : "")
+        + `<div>${esc((c.flow_note || [])[i] || "No estimate")}</div></td>` : "")
       + "</tr>";
   }
   document.getElementById("tbl-months").innerHTML = h;
+}
+
+function initWatchlist() {
+  const pick = document.getElementById("watch-manager");
+  const funds = (D.report_watchlist || {}).funds || [];
+  for (const key of [...new Set(funds.map(f => f.manager))].sort()) {
+    const opt = document.createElement("option"); opt.value = key;
+    opt.textContent = managerName(key); pick.append(opt);
+  }
+  pick.addEventListener("change", renderWatchlist);
+  document.getElementById("watch-search").addEventListener("input", renderWatchlist);
+  renderWatchlist();
+}
+
+function renderWatchlist() {
+  const coverage = D.report_watchlist || {}, all = coverage.funds || [];
+  const manager = document.getElementById("watch-manager").value;
+  const search = document.getElementById("watch-search").value.trim().toLowerCase();
+  const funds = all.filter(f => (!manager || f.manager === manager)
+    && `${f.ticker} ${f.name} ${managerName(f.manager)}`.toLowerCase().includes(search));
+  const noun = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+  document.getElementById("watch-summary").textContent = all.length
+    ? `${funds.length} of ${all.length} watchlist entries · ${noun(coverage.n_approved || 0, "source-reviewed observation")} · `
+      + `${noun(coverage.n_pending || 0, "observation")} pending review · ${noun(coverage.n_residuals || 0, "estimated NAV residual")} · `
+      + `${noun(coverage.n_capital_flow_estimates || 0, "estimated external capital flow")}. `
+      + "Blank estimates mean inputs are missing or incompatible—not zero flows."
+    : "Watchlist not built yet. Run scripts/38_manager_monthly.py build, then scripts/37_build_evergreen_site.py.";
+  let html = "<tr><th>Manager / fund</th><th>Coverage & blockers</th><th>Report observed</th>"
+    + "<th>Reviewed data</th><th>Official sources / checks</th></tr>";
+  for (const f of funds) {
+    const issues = [...new Set((coverage.issues || []).filter(i => i.ticker === f.ticker).map(i => i.reason))];
+    const labels = {returns_only: "Returns captured; fund NAV needed", nav_residual_available: "Estimated NAV residual available", not_verified: "Inputs not yet verified",
+      nav_anchor_only: "NAV anchor captured", nav_basis_mismatch: "NAV bases need reconciliation",
+      manual_access: "Authorized manual access needed", missing_nav_or_return: "NAV / return inputs missing",
+      aum_not_nav: "Published size is AUM, not verified NAV", scope_watchlist: "Fund scope under review"};
+    const notes = [labels[f.data_status] || f.data_status, (f.tracking_status || "").startsWith("legacy") ? "Legacy / runoff" : null,
+      ...(Array.isArray(f.flow_blockers) ? f.flow_blockers : [f.flow_blockers]),
+      ...(Array.isArray(f.notes) ? f.notes : [f.notes]), ...issues].filter(Boolean);
+    const sourceItems = (f.sources || []).map(s => {
+      const check = s.check || {};
+      const status = check.status || (s.access && s.access !== "public" ? "manual_access" : "not_checked");
+      const names = {manual_access: "Manual / authorized access", manual_browser: "Browser archive check required", not_checked: "Not fetched", error: "Fetch failed",
+        review_needed: "Review needed", unchanged: "Hash unchanged"};
+      return `${link(s.url, s.label || "Official source")}<div class="chart-hint">${esc(names[status] || status)}`
+        + (check.checked_at ? ` · ${esc(check.checked_at.slice(0, 10))}` : "")
+        + (check.note ? `<br>${esc(check.note)}` : "") + "</div>";
+    });
+    const sources = sourceItems.slice(0, 3).join("") + (sourceItems.length > 3
+      ? `<details><summary>${sourceItems.length - 3} more source links</summary>${sourceItems.slice(3).join("")}</details>` : "");
+    html += `<tr><td><div>${esc(managerName(f.manager))}</div><b>${esc(f.ticker)}</b>`
+      + `<div class="review-cell">${esc(f.name)}</div><div class="chart-hint">${esc(f.market || "")}</div></td>`
+      + `<td class="review-cell">${notes.length ? [...new Set(notes)].map(esc).join("<br>") : "Awaiting source review"}</td>`
+      + `<td>${esc(month(f.latest_report_month))}</td><td>${esc(month(f.latest_reviewed_month))}`
+      + `<div class="chart-hint">${f.n_reviewed || 0} reviewed`
+      + `${f.n_pending ? ` · ${f.n_pending} pending` : ""}</div></td>`
+      + `<td class="review-cell">${sources || "Source discovery needed"}</td></tr>`;
+  }
+  if (!funds.length) html += '<tr><td colspan="5">No watchlist entries match these filters.</td></tr>';
+  document.getElementById("tbl-watchlist").innerHTML = html;
 }
 
 function renderClasses() {
