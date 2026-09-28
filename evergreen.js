@@ -36,7 +36,7 @@ const link = (url, label) => {
   } catch (_) { return esc(label); }
 };
 const managerName = key => ({partners_group: "Partners Group", hamilton_lane: "Hamilton Lane",
-  carlyle: "Carlyle", stepstone: "StepStone", ares: "Ares"}[key] || key);
+  carlyle: "Carlyle", stepstone: "StepStone", ares: "Ares", blackstone: "Blackstone", kkr: "KKR"}[key] || key);
 // Flow figures STATED by the manager or its SEC filing (Ares' AESIF page
 // footnote; N-PORT sales and redemptions). Shown beside the estimate only.
 const SUBS_NOTE = "Gross subscriptions as stated by the manager or its N-PORT filing for the month; "
@@ -118,6 +118,8 @@ function managerKey(f) {
   if (source.includes("carlyle")) return "carlyle";
   if (source.includes("stepstone")) return "stepstone";
   if (source.startsWith("ares ")) return "ares";
+  if (source.startsWith("blackstone ")) return "blackstone";
+  if (source.startsWith("kkr ")) return "kkr";
   return source || "other";
 }
 
@@ -131,7 +133,7 @@ function matrixCell(value, metric, seg, i) {
   const c = seg.cols, ccy = seg.ccy;
   let formatted = "·", valueClass = "";
   if (metric === "size") formatted = money(value, ccy);
-  else if (metric === "ret") { formatted = pctSigned(value); valueClass = cls(value); }
+  else if (metric === "ret" || metric === "calculated_nav_change_pct") { formatted = pctSigned(value); valueClass = cls(value); }
   else if (metric === "flow") { formatted = moneySigned(value, ccy); valueClass = cls(value); }
   else if (metric === "flow_pct") { formatted = pctSigned(value); valueClass = cls(value); }
   else if (metric === "navps") formatted = value == null ? "·" : sym(ccy) + num(value);
@@ -149,11 +151,13 @@ function matrixCell(value, metric, seg, i) {
     : provisional ? "Provisional workbook"
     : scraped ? "Auto-read from the manager's published report" : "Source-reviewed / published";
   const effective = (c.subscriptions_effective || [])[i];
-  const note = metric === "flow" ? (c.flow_note || [])[i]
+  const note = metric === "calculated_nav_change_pct"
+    ? "Calculated from consecutive published NAV/share; not a reported total return and not used for implied flows"
+    : metric === "flow" ? (c.flow_note || [])[i]
     : metric === "reported_subscriptions_m" && value != null
       ? `${effective ? `effective ${effective} · ` : ""}${SUBS_NOTE}`
       : metric === "reported_redemptions_m" && value != null ? REDEEM_NOTE : "";
-  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}`;
+  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}`;
   const classes = [valueClass, provisional ? "matrix-provisional" : "", value == null ? "matrix-missing" : ""]
     .filter(Boolean).join(" ");
   return `<td class="${classes}" title="${esc(title)}">${formatted}</td>`;
@@ -198,6 +202,8 @@ function renderMatrix() {
     const metrics = [
       ["size", sizeLabel], ["ret", "Performance"], ["flow", "Implied flow"],
       ["flow_pct", "Flow / NAV"], ["navps", "NAV / share"],
+      ...((seg.cols.calculated_nav_change_pct || []).some(v => v != null)
+        ? [["calculated_nav_change_pct", "NAV change (calc.)", "Not a sponsor-reported total return"]] : []),
       ...(hasSubs(seg.cols) ? [["reported_subscriptions_m", "Gross sales", SUBS_NOTE]] : []),
       ...(hasRedeem(seg.cols) ? [["reported_redemptions_m", "Redemptions", REDEEM_NOTE]] : []),
     ];
@@ -508,15 +514,23 @@ function renderWatchlist() {
       ...(Array.isArray(f.flow_blockers) ? f.flow_blockers : [f.flow_blockers]),
       ...(Array.isArray(f.notes) ? f.notes : [f.notes]), ...issues].filter(Boolean);
     const sourceItems = (f.sources || []).map(s => {
-      const check = s.check || {};
+      const collected = (f.collection?.sources || []).find(c => c.url === s.url);
+      const check = collected ? {...collected, checked_at: f.collection.checked_at} : (s.check || {});
       const status = check.status || (s.access && s.access !== "public" ? "manual_access" : "not_checked");
       const names = {manual_access: "Manual / authorized access", manual_browser: "Browser archive check required", not_checked: "Not fetched", error: "Fetch failed",
-        review_needed: "Review needed", unchanged: "Hash unchanged"};
+        review_needed: "Review needed", unchanged: "Hash unchanged", read: "Read successfully",
+        not_a_numeric_source: "See linked fact card for metrics"};
       return `${link(s.url, s.label || "Official source")}<div class="chart-hint">${esc(names[status] || status)}`
         + (check.checked_at ? ` · ${esc(check.checked_at.slice(0, 10))}` : "")
         + (check.note ? `<br>${esc(check.note)}` : "") + "</div>";
     });
-    const sources = sourceItems.slice(0, 3).join("") + (sourceItems.length > 3
+    const collection = f.collection;
+    const health = collection ? `<div class="chart-hint"><b>Monthly collector: ${esc(collection.status)}</b>`
+      + ` · checked ${esc((collection.checked_at || "").slice(0,10))}`
+      + ` · data through ${esc(collection.latest_month || "unavailable")}`
+      + (collection.calculated_performance_available ? "<br>Calculated NAV change available; reported total return not supplied" : "")
+      + (collection.issues || []).map(x => `<br>${esc(x)}`).join("") + "</div>" : "";
+    const sources = health + sourceItems.slice(0, 3).join("") + (sourceItems.length > 3
       ? `<details><summary>${sourceItems.length - 3} more source links</summary>${sourceItems.slice(3).join("")}</details>` : "");
     html += `<tr><td><div>${esc(managerName(f.manager))}</div><b>${esc(f.ticker)}</b>`
       + `<div class="review-cell">${esc(f.name)}</div><div class="chart-hint">${esc(f.market || "")}</div></td>`
