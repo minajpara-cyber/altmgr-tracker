@@ -26,6 +26,7 @@
            border-radius: 9px; margin-left: 8px; vertical-align: 2px; }
   .badge.warn { border-color: #d58a16; color: #8a5a00; background: #fff8ec; }
   .badge.provisional { border-color: #6b7280; color: #4b5563; background: #f3f4f6; }
+  .badge.scraped { border-color: #2f6fae; color: #1f4f80; background: #eef5fc; }
   .eg-tbl { border-collapse: collapse; font-size: 12.5px;
             font-variant-numeric: tabular-nums; white-space: nowrap; }
   .eg-tbl th { text-align: right; padding: 4px 10px; font-weight: 600;
@@ -198,6 +199,9 @@
     <p class="chart-hint">
       Bars show the estimated NAV residual; the line shows published fund size.
       Missing, incompatible or unreviewed inputs leave the estimate blank, not zero.
+      <span id="flow-subs-hint" hidden>Blue bars are gross subscriptions and orange bars redemptions
+      as the manager or its SEC filing states them for the month; they are reported figures, not estimates,
+      and are never added into the NAV residual.</span>
     </p>
     <div class="chart-wrap" style="height:300px;margin:0 0 20px;"><canvas id="flowChart"></canvas></div>
 
@@ -247,6 +251,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./evergreen.js?v=20260924-2"></script>
+<script src="./evergreen.js?v=20260928-5"></script>
 </body>
 </html>

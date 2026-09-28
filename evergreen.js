@@ -36,7 +36,16 @@ const link = (url, label) => {
   } catch (_) { return esc(label); }
 };
 const managerName = key => ({partners_group: "Partners Group", hamilton_lane: "Hamilton Lane",
-  carlyle: "Carlyle", stepstone: "StepStone"}[key] || key);
+  carlyle: "Carlyle", stepstone: "StepStone", ares: "Ares"}[key] || key);
+// Flow figures STATED by the manager or its SEC filing (Ares' AESIF page
+// footnote; N-PORT sales and redemptions). Shown beside the estimate only.
+const SUBS_NOTE = "Gross subscriptions as stated by the manager or its N-PORT filing for the month; "
+  + "not netted against redemptions and not an estimate.";
+const REDEEM_NOTE = "Redemptions / repurchases as stated in the fund's N-PORT filing for the month "
+  + "(published quarterly, about 60 days after quarter-end).";
+const hasSubs = c => (c.reported_subscriptions_m || []).some(v => v != null);
+const hasRedeem = c => (c.reported_redemptions_m || []).some(v => v != null);
+const hasReinvest = c => (c.reported_reinvestments_m || []).some(v => v != null);
 
 const fundOf = t => D.funds.find(f => f.ticker === t);
 // Segments long enough to be a real reporting-currency era. The payload keeps
@@ -108,6 +117,7 @@ function managerKey(f) {
   if (source.includes("hamilton lane")) return "hamilton_lane";
   if (source.includes("carlyle")) return "carlyle";
   if (source.includes("stepstone")) return "stepstone";
+  if (source.startsWith("ares ")) return "ares";
   return source || "other";
 }
 
@@ -125,9 +135,24 @@ function matrixCell(value, metric, seg, i) {
   else if (metric === "flow") { formatted = moneySigned(value, ccy); valueClass = cls(value); }
   else if (metric === "flow_pct") { formatted = pctSigned(value); valueClass = cls(value); }
   else if (metric === "navps") formatted = value == null ? "·" : sym(ccy) + num(value);
-  const provisional = (c.review_status || [])[i] === "provisional";
-  const status = provisional ? "Provisional workbook" : "Source-reviewed / published";
-  const note = metric === "flow" ? (c.flow_note || [])[i] : "";
+  else if (metric === "reported_subscriptions_m") formatted = money(value, ccy);
+  else if (metric === "reported_redemptions_m") {
+    formatted = value == null ? "·" : value === 0 ? money(0, ccy) : moneySigned(-value, ccy);
+    valueClass = value ? "neg" : "";
+  }
+  // Stated flows carry their own source, whatever the month's tier (a
+  // photographed month keeps its NAV chain and gains the filing's flows).
+  const stated = metric.startsWith("reported_");
+  const provisional = !stated && (c.review_status || [])[i] === "provisional";
+  const scraped = (c.review_status || [])[i] === "scraped";
+  const status = stated ? "Stated in the manager's publication or SEC filing"
+    : provisional ? "Provisional workbook"
+    : scraped ? "Auto-read from the manager's published report" : "Source-reviewed / published";
+  const effective = (c.subscriptions_effective || [])[i];
+  const note = metric === "flow" ? (c.flow_note || [])[i]
+    : metric === "reported_subscriptions_m" && value != null
+      ? `${effective ? `effective ${effective} · ` : ""}${SUBS_NOTE}`
+      : metric === "reported_redemptions_m" && value != null ? REDEEM_NOTE : "";
   const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}`;
   const classes = [valueClass, provisional ? "matrix-provisional" : "", value == null ? "matrix-missing" : ""]
     .filter(Boolean).join(" ");
@@ -173,18 +198,22 @@ function renderMatrix() {
     const metrics = [
       ["size", sizeLabel], ["ret", "Performance"], ["flow", "Implied flow"],
       ["flow_pct", "Flow / NAV"], ["navps", "NAV / share"],
+      ...(hasSubs(seg.cols) ? [["reported_subscriptions_m", "Gross sales", SUBS_NOTE]] : []),
+      ...(hasRedeem(seg.cols) ? [["reported_redemptions_m", "Redemptions", REDEEM_NOTE]] : []),
     ];
-    metrics.forEach(([field, label], rowIndex) => {
+    metrics.forEach(([field, label, tip], rowIndex) => {
       body += `<tr${rowIndex === 0 ? ' class="matrix-fund-start"' : ""}>`;
       if (rowIndex === 0) {
         const provisional = f.n_provisional_months
           ? `<span class="badge provisional">${f.n_provisional_months} provisional</span>` : "";
+        const scraped = f.n_scraped_months
+          ? `<span class="badge scraped">${f.n_scraped_months} auto-read</span>` : "";
         body += `<td class="matrix-fund-cell" rowspan="${metrics.length}">`
           + `<span class="matrix-manager">${esc(managerName(managerKeyValue))}</span>`
-          + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${provisional}`
+          + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${scraped}${provisional}`
           + `<span class="matrix-fund-name">${esc(f.legal_name || "")}</span></td>`;
       }
-      body += `<th class="matrix-metric-cell" scope="row">${label}</th>`;
+      body += `<th class="matrix-metric-cell" scope="row"${tip ? ` title="${esc(tip)}"` : ""}>${label}</th>`;
       for (const m of months) {
         const i = byMonth.get(m);
         body += i == null ? '<td class="matrix-missing" title="No observation">·</td>'
@@ -217,15 +246,26 @@ function overviewTable() {
     const provisional = f.n_provisional_months
       ? `<span class="badge provisional" title="User-supplied workbook history. Values and calculations were transcribed and reconciled, but the underlying manager publication has not yet been independently verified.">${f.n_provisional_months} provisional</span>`
       : "";
+    const scraped = f.n_scraped_months
+      ? `<span class="badge scraped" title="Read automatically from the manager's own monthly publication. Each value links to the document it came from.">${f.n_scraped_months} auto-read</span>`
+      : "";
     h += "<tr>"
-      + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}${provisional}<div class="sub" `
+      + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}${scraped}${provisional}<div class="sub" `
       + `style="font-size:11px;color:var(--text-faint)">${esc(f.legal_name || "")}</div></td>`
       + `<td style="text-align:left">${esc(f.strategy || "·")}</td>`
       + `<td style="text-align:left">${f.ccy || "·"}</td>`
       + `<td>${month(f.latest_month)}</td>`
-      + `<td>${f.latest_navps == null ? "·" : sym(f.ccy) + num(f.latest_navps)}</td>`
+      + `<td${f.latest_navps_month && f.latest_navps_month !== f.latest_month
+          ? ` title="NAV per share as of ${esc(f.latest_navps_month)}"` : ""}>`
+      + `${f.latest_navps == null ? "·" : sym(f.ccy) + num(f.latest_navps)}</td>`
       + `<td>${money(f.latest_size_m, f.ccy)}</td>`
-      + `<td class="${cls(f.latest_flow_m)}">${moneySigned(f.latest_flow_m, f.ccy)}</td>`
+      + `<td class="${cls(f.latest_flow_m)}">${moneySigned(f.latest_flow_m, f.ccy)}`
+      + (f.latest_subscriptions_m == null ? ""
+        : `<div class="sub" style="font-size:11px;color:var(--text-faint)" title="${esc(SUBS_NOTE)}">`
+          + `gross subs ${money(f.latest_subscriptions_m, f.ccy)}`
+          + (f.latest_redemptions_m == null ? "" : ` · redemptions ${money(f.latest_redemptions_m, f.ccy)}`)
+          + ` (${month(f.latest_subscriptions_month)})</div>`)
+      + `</td>`
       + `<td class="${cls(f.ttm_flow_m)}">${moneySigned(f.ttm_flow_m, f.ccy)}</td>`
       + `<td class="${cls(f.ttm_return_pct)}">${pctSigned(f.ttm_return_pct, 1)}</td>`
       + `<td>${f.n_flow_months}</td>`
@@ -328,6 +368,11 @@ function renderFund() {
        data: c.flow,
        backgroundColor: c.flow.map(v => (v || 0) >= 0
          ? "rgba(11,107,50,0.45)" : "rgba(176,45,33,0.45)")},
+      ...(hasSubs(c) ? [{type: "bar", label: `Gross subscriptions, reported (${ccy}m)`, yAxisID: "y2",
+        data: c.reported_subscriptions_m, backgroundColor: "rgba(47,111,174,0.55)"}] : []),
+      ...(hasRedeem(c) ? [{type: "bar", label: `Redemptions, reported (${ccy}m)`, yAxisID: "y2",
+        data: c.reported_redemptions_m.map(v => v == null ? null : -v),
+        backgroundColor: "rgba(214,110,40,0.55)"}] : []),
       {type: "line", label: `Fund size (${ccy}m)`, yAxisID: "y1",
        data: c.size, borderColor: "#1f5fa6",
        backgroundColor: "rgba(31,95,166,0.10)",
@@ -335,10 +380,13 @@ function renderFund() {
        pointRadius: 0},
     ],
   }, {
-    y1: {position: "left", title: {display: true, text: `Fund size (${ccy}m)`}},
+    // A fund that publishes no size (AESIF) gets no empty size axis.
+    y1: {position: "left", display: c.size.some(v => v != null),
+         title: {display: true, text: `Fund size (${ccy}m)`}},
     y2: {position: "right", title: {display: true, text: `Flow (${ccy}m)`},
          grid: {drawOnChartArea: false}},
   });
+  document.getElementById("flow-subs-hint").hidden = !(hasSubs(c) || hasRedeem(c));
 
   drawChart("navpsChart", {
     labels: c.asof.map(month),
@@ -383,6 +431,10 @@ function monthTable(seg) {
   const hasWorkbookFlow = (c.flow_status || []).some(x => x === "provisional_workbook_flow");
   const head = ["Month", "NAV / share", "Return", "Fund size", "Size change",
                 "Performance effect", hasWorkbookFlow ? "Flow estimate" : "NAV residual (est.)", "% of NAV"];
+  const subs = hasSubs(c), reinvest = hasReinvest(c), redeem = hasRedeem(c);
+  if (subs) head.push(`<span title="${esc(SUBS_NOTE)}">Gross subscriptions (reported)</span>`);
+  if (reinvest) head.push("Reinvested distributions (reported)");
+  if (redeem) head.push(`<span title="${esc(REDEEM_NOTE)}">Redemptions (reported)</span>`);
   const reviewed = (c.flow_status || []).some(Boolean);
   if (reviewed) head.push("External capital flow (est.)", "Sources & qualification");
   let h = "<tr>" + head.map(x => `<th>${x}</th>`).join("") + "</tr>";
@@ -397,10 +449,21 @@ function monthTable(seg) {
       + `<td class="${cls(c.perf_effect[i])}">${moneySigned(c.perf_effect[i], ccy)}</td>`
       + `<td class="${cls(c.flow[i])}"><b>${moneySigned(c.flow[i], ccy)}</b></td>`
       + `<td class="${cls(c.flow_pct[i])}">${pctSigned(c.flow_pct[i])}</td>`
+      + (subs ? `<td title="${esc((c.subscriptions_effective || [])[i]
+          ? `effective ${c.subscriptions_effective[i]}` : "")}">`
+        + `${money((c.reported_subscriptions_m || [])[i], ccy)}</td>` : "")
+      + (reinvest ? `<td>${money((c.reported_reinvestments_m || [])[i], ccy)}</td>` : "")
+      + (redeem ? `<td class="${(c.reported_redemptions_m || [])[i] ? "neg" : "zero"}">`
+        + `${(c.reported_redemptions_m || [])[i] == null ? "·"
+          : c.reported_redemptions_m[i] === 0 ? money(0, ccy)
+          : moneySigned(-c.reported_redemptions_m[i], ccy)}</td>` : "")
       + (reviewed ? `<td>${moneySigned((c.capital_flow_m || [])[i], ccy)}</td>`
         + `<td class="review-cell">${link((c.source_url || [])[i], "NAV source")}`
         + ((c.return_source_url || [])[i] ? ` · ${link(c.return_source_url[i], "Return source")}` : "")
+        + ((c.flows_source_url || [])[i]
+          ? ` · ${link(c.flows_source_url[i], "Flows source")}` : "")
         + ((c.review_status || [])[i] === "provisional" ? ` <span class="badge provisional">provisional workbook</span>` : "")
+        + ((c.review_status || [])[i] === "scraped" ? ` <span class="badge scraped">auto-read</span>` : "")
         + `<div>${esc((c.flow_note || [])[i] || "No estimate")}</div></td>` : "")
       + "</tr>";
   }
