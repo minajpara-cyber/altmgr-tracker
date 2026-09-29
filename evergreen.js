@@ -1,4 +1,4 @@
-/* Monthly report tracker — funds tracked from the manager's own monthly reports.
+/* Monthly filing scrape (formerly "Monthly Reports") — funds tracked from the manager's own monthly reports.
 
    Wrapped in an IIFE: app.js owns global fmtM/fmtPct/signClass, and a
    top-level const redeclaration is a SyntaxError that silently kills the
@@ -84,7 +84,7 @@ fetch("./evergreen.json", {cache: "no-store"})
 
 function meta() {
   const el = document.getElementById("refresh-meta");
-  if (el) el.textContent = `Monthly reports through ${month(D.data_through)}`
+  if (el) el.textContent = `Monthly filing scrape through ${month(D.data_through)}`
     + (D.built ? ` · built ${D.built}` : "");
 }
 
