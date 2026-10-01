@@ -387,10 +387,12 @@
           if (v) { text = String(v); cls += ' dim'; }
           else if (row.key === 'unified_return_src'
                    && q.quarterly_return_rule === 'withheld') {
-            // N-PORT states class returns that cannot be tied to the lead
-            // class (10_extract_nport); the quarter is left blank.
+            // A month of N-PORT's quarter cannot be taken as the lead
+            // class's total return — its class is unidentified, or the
+            // filing got it wrong and the fund's reports do not pin it
+            // (10_extract_nport); the quarter is left blank.
             text = 'withheld'; cls += ' dim';
-            tooltip = ' title="N-PORT\'s class returns cannot be tied to the lead share class for this fund, so the quarter is left blank rather than filled from the NAV bridge. See Methodology."';
+            tooltip = ' title="A month of N-PORT\'s returns for this quarter cannot be taken as the lead share class\'s total return (the class cannot be identified, or the filing got the month wrong and the fund\'s reports do not show the right figure), so the quarter is left blank rather than filled from the NAV bridge. See Methodology."';
           }
         } else if (v != null && !Number.isNaN(v)) {
           if (row.kind === 'money') {
