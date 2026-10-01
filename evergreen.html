@@ -63,6 +63,11 @@
   .matrix-tbl thead .matrix-fund-head, .matrix-tbl thead .matrix-metric-head { z-index: 7; background: var(--bg, #f7f8fa); }
   .matrix-tbl .matrix-fund-cell { vertical-align: top; padding-top: 10px; white-space: normal; line-height: 1.35; }
   .matrix-fund-name { display: block; color: var(--text-faint); font-size: 12px; margin-top: 3px; }
+  .matrix-source, .src-line { display: block; margin-top: 4px; font-size: 11px; line-height: 1.35;
+    color: var(--text-dim); white-space: normal; }
+  .src-line { white-space: nowrap; }
+  .matrix-source a, .src-line a, #fd-source a { color: inherit; text-decoration: underline dotted; }
+  .src-detail { color: var(--text-faint); }
   .matrix-tbl .matrix-metric-cell { font-weight: 500; color: var(--text-dim); }
   .matrix-tbl .matrix-date { min-width: 96px; text-align: right; }
   .matrix-tbl tr.matrix-fund-start > * { border-top: 1px solid var(--border-strong); }
@@ -147,6 +152,7 @@
       <span class="matrix-key"><span class="matrix-swatch"></span>Source-reviewed or published series</span>
       <span class="matrix-key"><span class="matrix-swatch provisional"></span>Reviewed transcription from user-supplied workbook images; underlying publication not independently verified</span>
       <span>NAV / AUM* means the size is not verified as total net assets: either the supplied workbook did not independently establish that it is, or it is the AUM printed on the manager's fact card, rounded (e.g. $6.4B = ±$50m). Neither is used for implied flows.</span>
+      <span>Under each fund: its newest month's source and when the pipeline first had it — <i>first seen</i> = first download of that exact document (or an earlier hand check of it), <i>filed</i> = SEC filing date, <i>captured</i> = Internet Archive capture, <i>reviewed</i> = date a hand-entered figure was reviewed, <i>received</i> = date workbook photos were received. Hover for the publisher's own file date where there is one.</span>
       <span>· means unavailable—not zero. Each fund remains in its own reporting currency.</span>
     </p>
   </section>
@@ -194,6 +200,7 @@
     </div>
     <h2 id="fd-title">…</h2>
     <p class="chart-hint" id="fd-sub"></p>
+    <p class="chart-hint" id="fd-source"></p>
 
     <h2 class="section-title">Fund size and estimated NAV residual</h2>
     <p class="chart-hint">
@@ -251,6 +258,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./evergreen.js?v=20261001-1"></script>
+<script src="./evergreen.js?v=20261001-2"></script>
 </body>
 </html>

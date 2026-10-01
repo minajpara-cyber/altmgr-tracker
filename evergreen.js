@@ -35,6 +35,31 @@ const link = (url, label) => {
     return `<a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
   } catch (_) { return esc(label); }
 };
+// funds[].latest_source (script 37, scripts/latest_source.py): the newest
+// month's document and when the pipeline first had it. Dates stay ISO strings
+// formatted by hand: new Date("2026-09-28") is UTC midnight and prints 27 Sep
+// west of GMT.
+const MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const longDay = d => {
+  const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(d || "");
+  return m ? `${+m[3]} ${MONTHS3[+m[2] - 1]} ${m[1]}` : "";
+};
+const longMonth = d => {
+  const m = /^(\d{4})-(\d\d)/.exec(d || "");
+  return m ? `${MONTHS3[+m[2] - 1]} ${m[1]}` : "·";
+};
+const srcDate = s => s && s.date ? `${s.date_label || "dated"} ${longDay(s.date)}` : "";
+const srcTitle = s => !s ? "" : `Latest month ${longMonth(s.month)} — source: ${s.label}`
+  + (s.date ? `; ${srcDate(s)}` : "; date not recorded")
+  + (s.published ? `; publisher's file dated ${longDay(s.published)}` : "")
+  + (s.detail ? `; ${s.detail}` : "");
+// "Aug 2026 · Fact card · first seen 24 Sep 2026", the document linked.
+const srcLine = (s, labelKey = "short") => !s ? "" : `${esc(longMonth(s.month))} · `
+  + (s.url ? link(s.url, s[labelKey] || s.label) : esc(s[labelKey] || s.label))
+  + (s.date ? ` · ${esc(srcDate(s))}` : "");
+// The block (currency segment) whose last month is the fund's latest month.
+const isLatestSeg = (f, seg) => !!(f && f.latest_source) && seg.ccy === f.ccy
+  && seg.cols.asof[seg.cols.asof.length - 1] === f.latest_source.month;
 const managerName = key => ({partners_group: "Partners Group", hamilton_lane: "Hamilton Lane",
   carlyle: "Carlyle", stepstone: "StepStone", ares: "Ares", blackstone: "Blackstone", kkr: "KKR"}[key] || key);
 // Flow figures STATED by the manager or its SEC filing (Ares' AESIF page
@@ -142,7 +167,7 @@ function matrixMonths(limit) {
   return limit === "all" ? all : all.slice(-Number(limit));
 }
 
-function matrixCell(value, metric, seg, i) {
+function matrixCell(value, metric, seg, i, src) {
   const c = seg.cols, ccy = seg.ccy;
   let formatted = "·", valueClass = "";
   if (metric === "size") formatted = money(value, ccy);
@@ -172,7 +197,8 @@ function matrixCell(value, metric, seg, i) {
     : metric === "reported_subscriptions_m" && value != null
       ? `${effective ? `effective ${effective} · ` : ""}${SUBS_NOTE}`
       : metric === "reported_redemptions_m" && value != null ? REDEEM_NOTE : "";
-  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}`;
+  const srcNote = src && i === c.asof.length - 1 ? ` · ${srcTitle(src)}` : "";
+  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}${srcNote}`;
   const classes = [valueClass, provisional ? "matrix-provisional" : "", value == null ? "matrix-missing" : ""]
     .filter(Boolean).join(" ");
   return `<td class="${classes}" title="${esc(title)}">${formatted}</td>`;
@@ -212,6 +238,7 @@ function renderMatrix() {
   let body = "<tbody>";
   for (const {f, seg, manager: managerKeyValue} of blocks) {
     const byMonth = new Map((seg.cols.asof || []).map((asof, i) => [asof, i]));
+    const src = isLatestSeg(f, seg) ? f.latest_source : null;
     // The asterisk covers both sizes not verified as total net assets: a
     // workbook figure that may be AUM, and the AUM a fact card prints.
     const sizeLabel = (seg.cols.nav_measure || []).some(x => x === "unverified_nav_or_aum" || x === "aum")
@@ -234,13 +261,15 @@ function renderMatrix() {
         body += `<td class="matrix-fund-cell" rowspan="${metrics.length}">`
           + `<span class="matrix-manager">${esc(managerName(managerKeyValue))}</span>`
           + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${scraped}${provisional}`
-          + `<span class="matrix-fund-name">${esc(f.legal_name || "")}</span></td>`;
+          + `<span class="matrix-fund-name">${esc(f.legal_name || "")}</span>`
+          + (src ? `<span class="matrix-source" title="${esc(srcTitle(src))}">${srcLine(src)}</span>` : "")
+          + `</td>`;
       }
       body += `<th class="matrix-metric-cell" scope="row"${tip ? ` title="${esc(tip)}"` : ""}>${label}</th>`;
       for (const m of months) {
         const i = byMonth.get(m);
         body += i == null ? '<td class="matrix-missing" title="No observation">·</td>'
-          : matrixCell((seg.cols[field] || [])[i], field, seg, i);
+          : matrixCell((seg.cols[field] || [])[i], field, seg, i, src);
       }
       body += "</tr>";
     });
@@ -277,7 +306,11 @@ function overviewTable() {
       + `style="font-size:11px;color:var(--text-faint)">${esc(f.legal_name || "")}</div></td>`
       + `<td style="text-align:left">${esc(f.strategy || "·")}</td>`
       + `<td style="text-align:left">${f.ccy || "·"}</td>`
-      + `<td>${month(f.latest_month)}</td>`
+      + `<td${f.latest_source ? ` title="${esc(srcTitle(f.latest_source))}"` : ""}>${month(f.latest_month)}`
+      + (f.latest_source && f.latest_source.date
+        ? `<div class="src-line">${esc(f.latest_source.short || f.latest_source.label)} · ${esc(srcDate(f.latest_source))}</div>`
+        : "")
+      + `</td>`
       + `<td${f.latest_navps_month && f.latest_navps_month !== f.latest_month
           ? ` title="NAV per share as of ${esc(f.latest_navps_month)}"` : ""}>`
       + `${f.latest_navps == null ? "·" : sym(f.ccy) + num(f.latest_navps)}</td>`
@@ -383,6 +416,13 @@ function renderFund() {
     + `${seg.lead_class ? ` (lead class ${seg.lead_class})` : ""}`
     + ` · ${c.asof.length} months, ${month(c.asof[0])} to `
     + `${month(c.asof[c.asof.length - 1])}${withheldNote}${provisionalNote}`;
+
+  const ls = f.latest_source;
+  document.getElementById("fd-source").innerHTML = !ls ? ""
+    : `Latest month: ${srcLine(ls, "label")}`
+      + (ls.published ? ` · publisher's file dated ${esc(longDay(ls.published))}` : "")
+      + (ls.detail ? `<span class="src-detail"> (${esc(ls.detail)})</span>` : "")
+      + (isLatestSeg(f, seg) ? "" : ` <span class="src-detail">— in the ${esc(f.ccy)} series</span>`);
 
   drawChart("flowChart", {
     labels: c.asof.map(month),
