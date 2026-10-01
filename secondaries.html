@@ -16,13 +16,101 @@
   .stat-card.headline .value { color: var(--accent); }
   .controls-row { margin: 10px 0; }
   .controls-row label { font-family: var(--mono); font-size: 12px; }
-  .controls-row select { width: auto; min-width: 320px; }
+  .controls-row select { width: auto; min-width: 320px; max-width: 100%; }
   .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 4px; line-height: 1.5; }
-  .spon-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; margin-bottom: 26px; }
-  .spon-chart { flex: 1 1 460px; min-width: 380px; }
-  .spon-tbl { flex: 1 1 480px; min-width: 380px; margin-bottom: 0; }
-  #tbl-league .tabulator-row { cursor: pointer; }
-  .tabulator-row.tabulator-selected { background: #fdf2df !important; }
+
+  /* ---- readable, resizable tables ------------------------------------- */
+  .tbl-help { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center;
+    font-size: 12px; color: var(--text-dim); margin: 0 0 18px; padding: 7px 10px;
+    background: var(--bg-panel); border: 1px solid var(--border); }
+  .tbl-help b { color: var(--text); font-weight: 600; }
+  .grip-demo { display: inline-block; width: 3px; height: 12px; margin: 0 3px; vertical-align: -2px;
+    border-left: 1px solid var(--text-faint); border-right: 1px solid var(--text-faint); }
+  .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-blue);
+    cursor: pointer; text-decoration: underline; }
+  /* sentence-case headers that wrap instead of truncating with "…" */
+  .tabulator .tabulator-header { text-transform: none; letter-spacing: 0; font-size: 11.5px;
+    color: var(--text); }
+  .tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 3px 4px; }
+  .tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-col-title.tabulator-col-title-wrap {
+    line-height: 1.25; }
+  .tabulator .tabulator-row .tabulator-cell { padding: 6px 8px; }
+  .tabulator .tabulator-row.tabulator-row-even { background-color: #fafaf7; }
+  .tabulator .tabulator-cell.num { font-size: 11.5px; }
+  .tabulator .tabulator-cell.wrap { white-space: normal; line-height: 1.35; }
+  /* a visible grip between header columns: drag to resize, double-click to fit */
+  .tabulator .tabulator-col-resize-handle { cursor: col-resize; }
+  .tabulator .tabulator-header .tabulator-col-resize-handle { width: 11px; margin-left: -6px;
+    margin-right: -5px; z-index: 11; }
+  .tabulator .tabulator-header .tabulator-col-resize-handle::after { content: ""; position: absolute;
+    top: 22%; bottom: 22%; left: 4px; width: 3px; opacity: .55;
+    border-left: 1px solid var(--text-faint); border-right: 1px solid var(--text-faint); }
+  .tabulator .tabulator-header .tabulator-col-resize-handle:hover::after {
+    border-color: var(--accent); opacity: 1; }
+  .tabulator .tabulator-header .tabulator-col-resize-handle:last-of-type { width: 6px; margin-right: 0; }
+  .tabulator .tabulator-header .tabulator-col-resize-handle:last-of-type::after { left: 1px; }
+  .tabulator-tooltip { max-width: 360px; font-size: 12px; line-height: 1.4; white-space: normal; }
+  /* clickable rows (strategy / sponsor / holder pickers) */
+  .tabulator .tabulator-row.is-pickable { cursor: pointer; }
+  .tabulator .tabulator-row.is-pickable:hover { background-color: var(--row-hover); }
+  .tabulator .tabulator-row.is-picked,
+  .tabulator .tabulator-row.is-picked.tabulator-row-even,
+  .tabulator .tabulator-row.is-picked:hover { background-color: #fdf2df;
+    box-shadow: inset 3px 0 0 var(--accent); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px; }
+
+  /* ---- pricing filter bar --------------------------------------------- */
+  .filter-bar { display: grid; gap: 7px; margin: 10px 0 12px; padding: 8px 11px;
+    background: var(--bg-panel); border: 1px solid var(--border-strong);
+    box-shadow: 0 2px 6px rgba(0,0,0,.04); }
+  /* keep the filters in view while scrolling the pricing section — only on
+     screens tall enough that the bar doesn't crowd out the tables */
+  @media (min-width: 761px) and (min-height: 820px) {
+    .filter-bar { position: sticky; top: 0; z-index: 20; }
+    /* jump links inside the section land below the stuck bar (--fb-h is
+       kept equal to the bar's height from script) */
+    #pricing-section [id] { scroll-margin-top: calc(var(--fb-h, 160px) + 10px); }
+  }
+  .fb-row { display: flex; flex-wrap: wrap; gap: 7px 12px; align-items: flex-end; }
+  .fb-row > label { display: grid; gap: 3px; }
+  .fb-label { color: var(--text-faint); font-size: 10px; font-weight: 650;
+    letter-spacing: .06em; text-transform: uppercase; }
+  .filter-bar select { width: auto; min-width: 104px; }
+  .filter-bar #fb-holder { min-width: 200px; }
+  .filter-bar input[type=search] { width: 200px; padding: 5px 6px; border: 1px solid var(--border-strong);
+    background: white; font-family: var(--mono); font-size: 12px; }
+  .strat-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .strat-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border: 1px solid var(--border-strong); border-radius: 14px; background: white;
+    font: 12px var(--sans); color: var(--text); cursor: pointer; }
+  .strat-chip:hover { border-color: var(--accent); }
+  .strat-chip .swatch { margin-right: 0; }
+  .strat-chip .ct { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+  .strat-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent);
+    font-weight: 600; }
+  .strat-chip[disabled] { opacity: .45; cursor: default; }
+  .fb-summary { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+  .fb-summary b { color: var(--text); }
+  .drill-note { font-size: 12px; margin: 4px 0 8px; color: var(--text); }
+  .drill-note:empty { display: none; }
+  .picks { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 4px 0 8px;
+    font-size: 12px; }
+  .picks:empty { display: none; }
+  .pick { display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 8px;
+    border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 12px;
+    font-size: 12px; }
+  .pick button { border: 0; background: none; cursor: pointer; font-size: 14px; line-height: 1;
+    padding: 0 4px; color: var(--text-dim); }
+  .pick button:hover { color: var(--neg); }
+  .tx-toolbar { display: flex; gap: 10px; align-items: center; margin: 10px 0 6px; flex-wrap: wrap; }
+  .tx-toolbar .fb-summary { margin-left: 2px; }
+  #lg-min { width: auto; display: inline-block; padding: 1px 4px; }
+
+  @media (max-width: 760px) {
+    .fb-row > label { flex: 1 1 140px; }
+    .filter-bar select, .filter-bar #fb-holder, .filter-bar input[type=search] { width: 100%; min-width: 0; }
+  }
 </style>
 </head>
 <body>
@@ -62,14 +150,25 @@
     <div class="stat-card"><div class="label">Cross-held GP funds</div><div class="value" id="stat-xh">…</div></div>
   </div>
 
-  <nav class="range-row" aria-label="GP stakes sections" style="margin-bottom:18px">
+  <nav class="range-row" aria-label="GP stakes sections" style="margin-bottom:12px">
     <a class="chip" href="#coverage">Coverage</a>
     <a class="chip" href="#value-creation">Value creation</a>
     <a class="chip" href="#pricing">Entry pricing</a>
+    <a class="chip" href="#by-strategy">By strategy</a>
+    <a class="chip" href="#transactions">Transactions</a>
     <a class="chip" href="#cross-held">Cross-held funds</a>
     <a class="chip" href="#gp-exposure">GP exposure</a>
     <a class="chip" href="#largest-positions">Largest positions</a>
   </nav>
+
+  <div class="tbl-help" role="note">
+    <span><b>Tables:</b> drag the <span class="grip-demo" aria-hidden="true"></span> divider between
+      column headers to resize a column</span>
+    <span>double-click it to fit the column to its contents</span>
+    <span>hover a header for its definition</span>
+    <span>widths are remembered in this browser ·
+      <button type="button" class="linkbtn" id="reset-widths">reset column widths</button></span>
+  </div>
 
   <h2 id="coverage">Coverage &amp; entry pricing by fund</h2>
   <p class="chart-hint">Median entry uplift uses clean first observations of
@@ -118,6 +217,7 @@
   <div id="tbl-vc" class="tbl"></div>
   <p class="footnote" id="vc-footnote"></p>
 
+  <section id="pricing-section" aria-labelledby="pricing">
   <h2 id="pricing">Secondary-market pricing — entry price as % of NAV</h2>
   <p class="chart-hint" id="pr-intro">
     What our vehicles paid for GP fund stakes, as a percentage of the stake's
@@ -125,27 +225,73 @@
     denominator to shorten the NAV lag). 83% of NAV is the same fact as a
     +20% day-one uplift.
   </p>
+
+  <div class="filter-bar" id="pr-filters" role="region" aria-label="Entry pricing filters">
+    <div class="fb-row">
+      <div style="display:grid;gap:3px">
+        <span class="fb-label" id="fb-strat-label">Strategy</span>
+        <div class="strat-chips" id="fb-strats" role="group" aria-labelledby="fb-strat-label"></div>
+      </div>
+      <label><span class="fb-label">From</span><select id="fb-from"></select></label>
+      <label><span class="fb-label">To</span><select id="fb-to"></select></label>
+      <label><span class="fb-label">Holder</span><select id="fb-holder"></select></label>
+      <label id="fb-deal-wrap"><span class="fb-label">Deal type</span>
+        <select id="fb-deal">
+          <option value="">All deals</option>
+          <option value="lp">LP stakes</option>
+          <option value="gp">GP-led / continuation</option>
+        </select></label>
+      <label id="fb-conf-wrap" title="How the strategy label was assigned: high = the holder's own specific strategy disclosure or a hand-pinned sponsor; medium = fund-name keywords or the sponsor's disclosed-label majority; low = the sponsor's default or keyword-voted strategy, a generic 'Private Equity' label from the holder, or the holder fund's own mandate">
+        <span class="fb-label">Strategy label</span>
+        <select id="fb-conf">
+          <option value="">Any confidence</option>
+          <option value="hm">High + medium only</option>
+          <option value="h">High only</option>
+        </select></label>
+      <label><span class="fb-label">Search</span>
+        <input id="fb-q" type="search" placeholder="Fund or sponsor name" autocomplete="off"></label>
+      <button class="btn" id="fb-clear" type="button">Clear all</button>
+    </div>
+    <div class="fb-summary" id="fb-summary" aria-live="polite"></div>
+  </div>
+
   <div class="chart-wrap short"><canvas id="prChart"></canvas></div>
+  <p class="drill-note" id="pr-drill"></p>
   <p class="chart-hint" id="pr-note"></p>
+
+  <h3 id="by-strategy">Pricing by strategy</h3>
+  <p class="chart-hint">Every strategy under the other filters, side by side.
+    <b>Click a row</b> (or a strategy chip above, a legend entry, or a point on
+    the chart) to filter the league, holder table and transactions to that
+    strategy — click again to remove it.</p>
+  <div id="tbl-strat" class="tbl"></div>
 
   <h3>GP-family pricing league</h3>
   <p class="chart-hint">Where each sponsor family's funds change hands,
-    across all our holders' clean entry observations.
-    <b>Click rows to select sponsors</b> — the chart and underlying-fund
-    table below follow your selection (click again to deselect).</p>
+    across all our holders' clean entry observations that match the filters.
+    Sponsors with at least
+    <select id="lg-min" aria-label="Minimum observations per sponsor">
+      <option value="1">1</option><option value="3">3</option>
+      <option value="5" selected>5</option><option value="10">10</option>
+    </select>
+    matching entries. <b>Click rows to select sponsors</b> — the transactions
+    below follow your selection (click again to deselect).</p>
   <div id="tbl-league" class="tbl"></div>
 
-  <h3>Selected sponsors — pricing over time &amp; underlying stakes</h3>
-  <p class="chart-hint" id="spon-note">No sponsors selected — click rows in
-    the league table above (multi-select supported).</p>
-  <div class="spon-row">
-    <div class="chart-wrap short spon-chart"><canvas id="sponChart"></canvas></div>
-    <div id="tbl-spon" class="tbl spon-tbl"></div>
+  <h3 id="transactions">Transactions — pricing over time &amp; underlying stakes</h3>
+  <p class="chart-hint" id="tx-note"></p>
+  <div class="picks" id="tx-picks"></div>
+  <div class="chart-wrap short"><canvas id="txChart"></canvas></div>
+  <div class="tx-toolbar">
+    <button class="btn" id="tx-csv" type="button">Download CSV</button>
+    <span class="fb-summary" id="tx-count"></span>
   </div>
+  <div id="tbl-tx" class="tbl"></div>
 
   <h3>Median entry price by holder</h3>
   <p class="chart-hint" id="pr-holder-note"></p>
   <div id="tbl-holder" class="tbl"></div>
+  </section>
 
   <h2 id="cross-held">Cross-held underlying GP funds</h2>
   <p class="chart-hint">The same underlying fund held by several of our
@@ -174,6 +320,87 @@ const fmtPositionBn = v => v == null ? "" : "$" + (v / 1e9).toLocaleString(undef
 const fmtPositionPct = v => v == null ? "" : (v * 100).toFixed(1) + "%";
 const fmtPositionX = v => v == null ? "" : Number(v).toFixed(2) + "x";
 
+// ================= table helpers: resizable, remembered widths ==============
+// Every table is built through mkTable(): sentence-case headers that wrap
+// instead of truncating, a visible resize grip (styled above), header
+// tooltips, and column widths remembered per table in localStorage (a
+// per-viewer convenience — the page works the same without storage).
+const WIDTH_KEY = "gpstakes.colwidths.v1";
+const readWidths = () => {
+  try { return JSON.parse(localStorage.getItem(WIDTH_KEY) || "{}") || {}; } catch (e) { return {}; }
+};
+const writeWidths = v => {
+  try { localStorage.setItem(WIDTH_KEY, JSON.stringify(v)); } catch (e) { /* storage blocked */ }
+};
+const TABLES = [];
+const withSaved = (id, cols) => {
+  const saved = readWidths()[id] || {};
+  return cols.map(c => Object.assign({}, c, saved[c.field] ? {width: saved[c.field]} : {}));
+};
+// a frozen name column would leave a phone almost no room to scroll the rest
+const NARROW = window.matchMedia("(max-width: 760px)").matches;
+function mkTable(id, opts) {
+  const cols = NARROW ? opts.columns.map(c => c.frozen ? Object.assign({}, c, {frozen: false}) : c)
+    : opts.columns;
+  const t = new Tabulator("#" + id, Object.assign({
+    layout: "fitColumns",
+    columnHeaderVertAlign: "bottom",
+    columnDefaults: {headerWordWrap: true, headerTooltip: true, resizable: true},
+  }, opts, {columns: withSaved(id, cols)}));
+  t.on("columnResized", col => {
+    // pin the width on the live definition: fitColumns re-lays out every
+    // column without one (on scroll-into-view, window resize, row-count
+    // change) and would otherwise snap the dragged column back
+    const w = Math.round(col.getWidth());
+    col.getDefinition().width = w;
+    const all = readWidths();
+    (all[id] = all[id] || {})[col.getField()] = w;
+    writeWidths(all);
+    requestAnimationFrame(() => t.redraw());   // re-measure wrapped header heights
+  });
+  // Tabulator 5.5 sizes the header row (verticalAlignHeaders) before
+  // fitColumns settles the widths, so titles that wrap at the final width get
+  // clipped — on build and on every internal redraw (scroll into view,
+  // window resize). Re-measure after each layout pass. layout-refreshed is an
+  // internal event, fine here because the CDN version is pinned to 5.5.4.
+  let aligning = false;
+  t.eventBus.subscribe("layout-refreshed", () => {
+    if (aligning || !t.element.offsetParent) return;
+    aligning = true;
+    try { t.columnManager.verticalAlignHeaders(); } finally { aligning = false; }
+  });
+  t.built = new Promise(res => t.on("tableBuilt", () => {
+    requestAnimationFrame(() => t.redraw());
+    res();
+  }));
+  TABLES.push({id, t, cols});
+  return t;
+}
+document.getElementById("reset-widths").addEventListener("click", () => {
+  writeWidths({});
+  TABLES.forEach(x => {
+    x.t.getColumns().forEach(c => { delete c.getDefinition().width; });
+    x.t.redraw(true);                            // fitColumns again; sort is kept
+    requestAnimationFrame(() => x.t.redraw());
+  });
+});
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => TABLES.forEach(x => x.t.redraw()), 150);
+});
+// cell tooltip showing the full text of a (possibly truncated) cell
+const tipEl = s => { const el = document.createElement("div"); el.textContent = s; return el; };
+const textTip = (e, cell) => {
+  const v = cell.getValue();
+  if (v == null || v === "") return "";
+  return tipEl(Array.isArray(v) ? v.join(", ") : String(v).split("|").join(", "));
+};
+const NUM = {hozAlign: "right", sorter: "number", cssClass: "num"};
+const col = (title, field, extra) => Object.assign({title, field}, extra || {});
+const numCol = (title, field, fmt, extra) =>
+  Object.assign({title, field}, NUM, fmt ? {formatter: c => fmt(c.getValue())} : {}, extra || {});
+
 fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   document.getElementById("refresh-meta").textContent =
     "Positions data generated " + (d.generated_at || "").slice(0, 10);
@@ -184,70 +411,73 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   document.getElementById("stat-xh").textContent =
     d.stats.n_cross_held.toLocaleString();
 
-  new Tabulator("#tbl-funds", {
-    data: d.by_fund, layout: "fitColumns", height: "440px",
+  mkTable("tbl-funds", {
+    data: d.by_fund, height: "440px",
     initialSort: [{column: "fv", dir: "desc"}],
     columns: [
-      {title: "Fund", field: "label", minWidth: 190},
-      {title: "Ticker", field: "ticker", width: 90},
-      {title: "As of", field: "latest_period", width: 105},
-      {title: "Positions", field: "n_positions", sorter: "number", hozAlign: "right", width: 95},
-      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionM(c.getValue()), width: 110},
-      {title: "Median entry uplift", field: "median_entry_uplift", sorter: "number",
-       hozAlign: "right", formatter: c => fmtPositionPct(c.getValue()), width: 150},
-      {title: "% marked up day one", field: "share_marked_up", sorter: "number",
-       hozAlign: "right", formatter: c => fmtPositionPct(c.getValue()), width: 160},
-      {title: "Clean entries", field: "n_entry_clean_sec", sorter: "number",
-       hozAlign: "right", width: 115},
-      {title: "Cross-held", field: "n_cross_held", sorter: "number", hozAlign: "right",
-       width: 100},
+      col("Fund", "label", {minWidth: 190, widthGrow: 2.4, frozen: true, tooltip: textTip}),
+      col("Ticker", "ticker", {minWidth: 82}),
+      col("As of", "latest_period", {minWidth: 96,
+        headerTooltip: "Latest period-end with position-level data for this vehicle"}),
+      numCol("Positions", "n_positions", null, {minWidth: 98,
+        headerTooltip: "Underlying positions held at the latest period (cash-management sleeves excluded)"}),
+      numCol("Fair value", "fv", fmtPositionM, {minWidth: 96,
+        headerTooltip: "Fair value of those positions at the latest period — the GP's own marks"}),
+      numCol("Median entry uplift", "median_entry_uplift", fmtPositionPct, {minWidth: 108,
+        headerTooltip: "Median of (first reported fair value ÷ cost − 1) across this vehicle's clean secondary entries. +20% uplift ≈ bought at 83% of NAV"}),
+      numCol("% marked up day one", "share_marked_up", fmtPositionPct, {minWidth: 108,
+        headerTooltip: "Share of clean secondary entries whose first reported fair value was above cost"}),
+      numCol("Clean entries", "n_entry_clean_sec", null, {minWidth: 92,
+        headerTooltip: "Secondary purchases first reported within ~13 months of acquisition, with cost and fair value — the sample behind the two uplift columns"}),
+      numCol("Cross-held", "n_cross_held", null, {minWidth: 92,
+        headerTooltip: "Latest positions in an underlying fund that at least one other tracked vehicle holds now or has held in an earlier period"}),
     ],
   });
 
-  new Tabulator("#tbl-xh", {
-    data: d.cross_holders, layout: "fitColumns", height: "520px",
+  mkTable("tbl-xh", {
+    data: d.cross_holders, height: "520px",
     columns: [
-      {title: "Underlying fund", field: "name", minWidth: 260},
-      {title: "GP family", field: "gp_family", width: 170},
-      {title: "Holders", field: "n_holders", sorter: "number", hozAlign: "right", width: 90},
-      {title: "Held by", field: "holders", minWidth: 200,
-       formatter: c => (c.getValue() || "").split("|").join(", ")},
-      {title: "FV (latest)", field: "fv_latest", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionM(c.getValue()), width: 110},
-      {title: "Mult low", field: "mult_low", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionX(c.getValue()), width: 95},
-      {title: "Mult high", field: "mult_high", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionX(c.getValue()), width: 95},
-      {title: "Spread", field: "mult_spread", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionX(c.getValue()), width: 90},
-      {title: "As of", field: "mult_period", width: 105},
+      col("Underlying fund", "name", {minWidth: 240, widthGrow: 2.6, frozen: true, tooltip: textTip}),
+      col("GP family", "gp_family", {minWidth: 140, widthGrow: 1.3, tooltip: textTip}),
+      numCol("Holders", "n_holders", null, {minWidth: 92,
+        headerTooltip: "How many of our vehicles have ever held this fund"}),
+      col("Held by", "holders", {minWidth: 180, widthGrow: 1.6, tooltip: textTip,
+        formatter: c => (c.getValue() || "").split("|").join(", ")}),
+      numCol("FV (latest)", "fv_latest", fmtPositionM, {minWidth: 96,
+        headerTooltip: "Combined fair value across holders at the latest period anyone reported it"}),
+      numCol("Lowest multiple", "mult_low", fmtPositionX, {minWidth: 92,
+        headerTooltip: "Lowest FV ÷ cost among holders at the comparison date"}),
+      numCol("Highest multiple", "mult_high", fmtPositionX, {minWidth: 92,
+        headerTooltip: "Highest FV ÷ cost among holders at the comparison date"}),
+      numCol("Spread", "mult_spread", fmtPositionX, {minWidth: 90,
+        headerTooltip: "Highest minus lowest multiple — how differently holders carry the same fund"}),
+      col("Multiples as of", "mult_period", {minWidth: 100,
+        headerTooltip: "Latest semi-annual date where 2+ holders disclosed cost for this fund"}),
     ],
   });
 
-  new Tabulator("#tbl-gp", {
-    data: d.gp_families, layout: "fitColumns", height: "440px",
+  mkTable("tbl-gp", {
+    data: d.gp_families, height: "440px",
     columns: [
-      {title: "GP family", field: "family", minWidth: 220},
-      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionM(c.getValue()), width: 130},
-      {title: "Underlying funds", field: "n_funds", sorter: "number", hozAlign: "right",
-       width: 140},
-      {title: "Our holders", field: "n_holders", sorter: "number", hozAlign: "right",
-       width: 120},
+      col("GP family", "family", {minWidth: 200, widthGrow: 2.5, tooltip: textTip}),
+      numCol("Fair value", "fv", fmtPositionM, {minWidth: 110,
+        headerTooltip: "Latest-period fair value across all our vehicles in this sponsor's funds"}),
+      numCol("Underlying funds", "n_funds", null, {minWidth: 110,
+        headerTooltip: "Distinct funds of this sponsor held at the latest period"}),
+      numCol("Our holders", "n_holders", null, {minWidth: 100,
+        headerTooltip: "How many of our vehicles hold at least one of this sponsor's funds"}),
     ],
   });
 
-  new Tabulator("#tbl-top", {
-    data: d.top_positions, layout: "fitColumns", height: "520px",
+  mkTable("tbl-top", {
+    data: d.top_positions, height: "520px",
     columns: [
-      {title: "Position", field: "name", minWidth: 280},
-      {title: "GP family", field: "gp_family", width: 170},
-      {title: "Held by", field: "ticker", width: 100},
-      {title: "Fair value", field: "fv", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionM(c.getValue()), width: 120},
-      {title: "FV / cost", field: "multiple", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionX(c.getValue()), width: 100},
+      col("Position", "name", {minWidth: 260, widthGrow: 3, tooltip: textTip}),
+      col("GP family", "gp_family", {minWidth: 150, widthGrow: 1.4, tooltip: textTip}),
+      col("Held by", "ticker", {minWidth: 90}),
+      numCol("Fair value", "fv", fmtPositionM, {minWidth: 100}),
+      numCol("FV / cost", "multiple", fmtPositionX, {minWidth: 90,
+        headerTooltip: "Carrying multiple: fair value ÷ remaining cost. Cost falls with distributions, so aged positions show high multiples"}),
     ],
   });
 
@@ -380,33 +610,37 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     recon: compCount(r.ticker) ? usableCount(r.ticker) + "/" + compCount(r.ticker) : "—",
     cum_total: r.cum_markup == null ? null : r.cum_markup + r.cum_held,
   }));
-  new Tabulator("#tbl-vc", {
-    data: vcRows, layout: "fitColumns", height: "520px",
+  mkTable("tbl-vc", {
+    data: vcRows, height: "520px",
     initialSort: [{column: "cum_total", dir: "desc"}],
     columns: [
-      {title: "Fund", field: "label", minWidth: 190},
-      {title: "Ticker", field: "ticker", width: 90},
-      {title: "Window", field: "window_from", width: 150,
-       formatter: c => {
-         const r = c.getRow().getData();
-         return r.window_from ? r.window_from.slice(0, 7) + " → " + (r.window_to || "").slice(0, 7) : "";
-       }},
-      {title: "Periods", field: "periods_used", sorter: "number", hozAlign: "right", width: 85},
-      {title: "Recon pass", field: "recon", hozAlign: "right", width: 100},
-      {title: "Day-one markup", field: "cum_markup", sorter: "number", hozAlign: "right",
-       formatter: c => fmtSM(c.getValue()), width: 130},
-      {title: "Held appreciation", field: "cum_held", sorter: "number", hozAlign: "right",
-       formatter: c => fmtSM(c.getValue()), width: 140},
-      {title: "Value creation", field: "cum_total", sorter: "number", hozAlign: "right",
-       formatter: c => fmtSM(c.getValue()), width: 120},
-      {title: "Realized (unwound)", field: "cum_realized", sorter: "number", hozAlign: "right",
-       formatter: c => fmtSM(c.getValue()), width: 145},
-      {title: "Day-one share", field: "markup_share_of_total", sorter: "number", hozAlign: "right",
-       formatter: c => {
-         const v = c.getValue();
-         return v == null ? "" :
-           '<span style="color:var(--accent);font-weight:600">' + (v * 100).toFixed(1) + "%</span>";
-       }, width: 115},
+      col("Fund", "label", {minWidth: 190, widthGrow: 2.2, frozen: true, tooltip: textTip}),
+      col("Ticker", "ticker", {minWidth: 82}),
+      col("Window", "window_from", {minWidth: 140,
+        headerTooltip: "First → last period-end used in the cumulative totals",
+        formatter: c => {
+          const r = c.getRow().getData();
+          return r.window_from ? r.window_from.slice(0, 7) + " → " + (r.window_to || "").slice(0, 7) : "";
+        }}),
+      numCol("Periods", "periods_used", null, {minWidth: 92,
+        headerTooltip: "Semi-annual periods included in the cumulative totals"}),
+      col("Recon pass", "recon", {minWidth: 88, hozAlign: "right", cssClass: "num",
+        headerTooltip: "Periods passing the ±15% reconciliation gate ÷ periods where the split could be computed"}),
+      numCol("Day-one markup", "cum_markup", fmtSM, {minWidth: 108,
+        headerTooltip: "Cumulative fair value over cost on newly appearing secondary purchases"}),
+      numCol("Held appreciation", "cum_held", fmtSM, {minWidth: 124,
+        headerTooltip: "Cumulative mark movement on positions held across both period-ends, net of follow-ons and returns of capital"}),
+      numCol("Value creation", "cum_total", fmtSM, {minWidth: 104,
+        headerTooltip: "Day-one markup + held appreciation"}),
+      numCol("Realized (unwound)", "cum_realized", fmtSM, {minWidth: 112,
+        headerTooltip: "Appreciation already counted above that later left the unrealized bucket on exits — shown separately to avoid double counting"}),
+      numCol("Day-one share", "markup_share_of_total", null, {minWidth: 96,
+        headerTooltip: "Day-one markup ÷ value creation",
+        formatter: c => {
+          const v = c.getValue();
+          return v == null ? "" :
+            '<span style="color:var(--accent);font-weight:600">' + (v * 100).toFixed(1) + "%</span>";
+        }}),
     ],
   });
 
@@ -427,6 +661,13 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     "counted that later converted to realized on exits, shown separately to avoid double counting.";
 
   // ================= secondary pricing ======================================
+  // Everything in this section is computed in the page from pr.entries (one
+  // row per clean secondary entry), so the filter bar — strategy, period,
+  // holder, deal type, label confidence, search — drives the strategy
+  // chart, the strategy table, the sponsor league, the transactions and the
+  // holder table alike. Stats match scripts/24: median, inclusive quartiles,
+  // $-weighted by entry FV; "last 12 months" = within 365 days of the latest
+  // acquisition in the whole sample.
   const pr = d.pricing || {};
   if (pr.meta) {
     document.getElementById("pr-intro").innerHTML +=
@@ -435,67 +676,341 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
       " after backing NAV drift out of the median " + pr.meta.median_lag_days + "-day lag).";
   }
 
-  const halves = [...new Set((pr.by_strategy_half || []).map(r => r.half))].sort();
-  const STRATS = [
-    ["buyout", "Buyout", "#1f5fa6"],
-    ["growth", "Growth", "#c47a00"],
-    ["venture", "Venture", "#6d4fa1"],
-    ["credit", "Credit", "#14803c"],
-    ["real_assets", "Real assets", "#0f766e"],
-  ];
-  const prCell = {};
-  (pr.by_strategy_half || []).forEach(r => { prCell[r.strategy + "|" + r.half] = r; });
-  const prDatasets = STRATS
-    .filter(([s]) => halves.some(h => prCell[s + "|" + h]))
-    .map(([s, lab, col]) => {
-      const rs = halves.map(h => prCell[s + "|" + h] || null);
+  const entries = (pr.entries || []).filter(e => e && e.p != null && e.h);
+  const hasConf = entries.some(e => e.c);
+  const hasDeal = entries.some(e => e.k);
+  if (!hasConf) document.getElementById("fb-conf-wrap").style.display = "none";
+  if (!hasDeal) document.getElementById("fb-deal-wrap").style.display = "none";
+
+  const STRAT_META = {
+    buyout: ["Buyout", "#1f5fa6"], growth: ["Growth", "#c47a00"],
+    venture: ["Venture", "#6d4fa1"], credit: ["Credit", "#14803c"],
+    real_assets: ["Real assets", "#0f766e"],
+    special_sits: ["Special situations", "#b3382c"],
+    unclassified: ["Unclassified", "#6b7280"],
+  };
+  const stratLabel = s => STRAT_META[s] ? STRAT_META[s][0]
+    : (s ? s.replace(/_/g, " ").replace(/^./, ch => ch.toUpperCase()) : "Unclassified");
+  const stratColor = s => STRAT_META[s] ? STRAT_META[s][1] : "#4b5563";
+  const presentStrats = new Set(entries.map(e => e.s));
+  const STRAT_LIST = Object.keys(STRAT_META).filter(s => presentStrats.has(s))
+    .concat([...presentStrats].filter(s => !STRAT_META[s]).sort());
+  const CONF_LABEL = {h: "High", m: "Medium", l: "Low", n: "None"};
+  const hexA = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return "rgba(" + (n >> 16 & 255) + "," + (n >> 8 & 255) + "," + (n & 255) + "," + a + ")";
+  };
+
+  const medOf = a => {
+    if (!a.length) return null;
+    const s = [...a].sort((x, y) => x - y);
+    return s.length % 2 ? s[(s.length - 1) / 2]
+      : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  };
+  // inclusive (linear) quartiles — same as statistics.quantiles(method="inclusive")
+  const quantile = (s, q) => {
+    if (!s.length) return null;
+    const pos = (s.length - 1) * q, lo = Math.floor(pos), fr = pos - lo;
+    return lo + 1 < s.length ? s[lo] + (s[lo + 1] - s[lo]) * fr : s[lo];
+  };
+  function stats(rows) {
+    if (!rows.length) return null;
+    const s = rows.map(e => e.p).sort((x, y) => x - y);
+    const fv = rows.reduce((t, e) => t + (e.v || 0), 0);
+    return {
+      n: rows.length, median: medOf(s), p25: quantile(s, 0.25), p75: quantile(s, 0.75),
+      wavg: fv ? rows.reduce((t, e) => t + e.p * (e.v || 0), 0) / fv : null, fv,
+    };
+  }
+  const groupBy = (rows, key) => {
+    const m = new Map();
+    rows.forEach(e => { const k = key(e); if (!m.has(k)) m.set(k, []); m.get(k).push(e); });
+    return m;
+  };
+
+  const allHalves = [...new Set(entries.map(e => e.h))].sort();
+  const maxAcq = entries.reduce((m, e) => e.d && e.d > m ? e.d : m, "");
+  const maxAcqMs = Date.parse(maxAcq);
+  // "Last 12m" = the 12 months to the end of the selected period (To), or to
+  // the latest acquisition in the data when no To is set — the latter is
+  // exactly scripts/24's league latest_median
+  let ttmAnchorMs = maxAcqMs;
+  const halfEndMs = h => Date.parse(h.slice(0, 4) + (h.endsWith("H1") ? "-06-30" : "-12-31"));
+  const latestMedian = rows => {
+    const ttm = rows.filter(e => {
+      if (!e.d) return false;
+      const days = (ttmAnchorMs - Date.parse(e.d)) / 864e5;
+      return days >= 0 && days <= 365;
+    }).map(e => e.p);
+    return ttm.length >= 3 ? medOf(ttm) : null;
+  };
+  const mixText = rows => {
+    const n = rows.length;
+    return [...groupBy(rows, e => e.s)].sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 3).map(([s, rs]) => stratLabel(s) + " " + Math.round(100 * rs.length / n) + "%")
+      .join(", ");
+  };
+
+  // ---- filter state ----
+  const state = {strats: new Set(), sponsors: [], from: "", to: "", holder: "",
+                 deal: "", conf: "", q: "", leagueMin: 5};
+  const qNorm = () => state.q.trim().toLowerCase();
+  function passes(e, opt) {
+    opt = opt || {};
+    if (!opt.anyStrategy && state.strats.size && !state.strats.has(e.s)) return false;
+    if (!opt.anyPeriod && state.from && e.h < state.from) return false;
+    if (!opt.anyPeriod && state.to && e.h > state.to) return false;
+    if (state.holder && e.t !== state.holder) return false;
+    if (state.deal && (e.k || "lp") !== state.deal) return false;
+    if (state.conf === "h" && e.c !== "h") return false;
+    if (state.conf === "hm" && e.c !== "h" && e.c !== "m") return false;
+    const q = qNorm();
+    if (q && ((e.n || "") + " " + (e.f || "")).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }
+  const visibleHalves = () => allHalves.filter(h =>
+    (!state.from || h >= state.from) && (!state.to || h <= state.to));
+
+  // ---- controls ----
+  const elFrom = document.getElementById("fb-from"), elTo = document.getElementById("fb-to");
+  const elHolder = document.getElementById("fb-holder"), elDeal = document.getElementById("fb-deal");
+  const elConf = document.getElementById("fb-conf"), elQ = document.getElementById("fb-q");
+  const addOpt = (sel, value, text) => {
+    const o = document.createElement("option"); o.value = value; o.textContent = text; sel.appendChild(o);
+  };
+  addOpt(elFrom, "", "Earliest"); addOpt(elTo, "", "Latest");
+  allHalves.forEach(h => { addOpt(elFrom, h, h); addOpt(elTo, h, h); });
+  addOpt(elHolder, "", "All holders");
+  [...new Set(entries.map(e => e.t))]
+    .sort((a, b) => (labelByTicker[a] || a).localeCompare(labelByTicker[b] || b))
+    .forEach(t => addOpt(elHolder, t, (labelByTicker[t] || t) + " (" + t + ")"));
+
+  const chipBox = document.getElementById("fb-strats");
+  const chipAll = document.createElement("button");
+  chipAll.type = "button"; chipAll.className = "strat-chip"; chipAll.dataset.s = "";
+  chipBox.appendChild(chipAll);
+  const chipEls = {};
+  STRAT_LIST.forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "strat-chip"; b.dataset.s = s;
+    b.innerHTML = '<span class="swatch"></span><span class="lb"></span><span class="ct"></span>';
+    b.querySelector(".swatch").style.background = stratColor(s);
+    b.querySelector(".lb").textContent = stratLabel(s);
+    chipBox.appendChild(b);
+    chipEls[s] = b;
+  });
+  chipBox.addEventListener("click", ev => {
+    const b = ev.target.closest(".strat-chip");
+    if (!b || b.disabled) return;
+    if (!b.dataset.s) state.strats.clear(); else toggleStrat(b.dataset.s);
+    render();
+  });
+  function toggleStrat(s) {
+    if (state.strats.has(s)) state.strats.delete(s); else state.strats.add(s);
+  }
+  function toggleSponsor(f) {
+    const i = state.sponsors.indexOf(f);
+    if (i >= 0) state.sponsors.splice(i, 1); else state.sponsors.push(f);
+  }
+
+  const onPeriod = () => {
+    state.from = elFrom.value; state.to = elTo.value;
+    if (state.from && state.to && state.from > state.to) {   // keep the range valid
+      [state.from, state.to] = [state.to, state.from];
+    }
+    render();
+  };
+  elFrom.addEventListener("change", onPeriod);
+  elTo.addEventListener("change", onPeriod);
+  elHolder.addEventListener("change", () => { state.holder = elHolder.value; render(); });
+  elDeal.addEventListener("change", () => { state.deal = elDeal.value; render(); });
+  elConf.addEventListener("change", () => { state.conf = elConf.value; render(); });
+  let qTimer = null;
+  elQ.addEventListener("input", () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { state.q = elQ.value; render(); }, 180);
+  });
+  document.getElementById("fb-clear").addEventListener("click", () => {
+    Object.assign(state, {strats: new Set(), sponsors: [], from: "", to: "", holder: "",
+                          deal: "", conf: "", q: ""});
+    render();
+  });
+  const elMin = document.getElementById("lg-min");
+  elMin.addEventListener("change", () => { state.leagueMin = +elMin.value || 1; render(); });
+
+  function syncControls(baseRows) {
+    elFrom.value = state.from; elTo.value = state.to; elHolder.value = state.holder;
+    elDeal.value = state.deal; elConf.value = state.conf;
+    if (elQ.value !== state.q) elQ.value = state.q;
+    const nBy = {};
+    baseRows.forEach(e => { nBy[e.s] = (nBy[e.s] || 0) + 1; });
+    chipAll.setAttribute("aria-pressed", state.strats.size ? "false" : "true");
+    chipAll.textContent = "All strategies";
+    STRAT_LIST.forEach(s => {
+      const b = chipEls[s], n = nBy[s] || 0;
+      b.setAttribute("aria-pressed", state.strats.has(s) ? "true" : "false");
+      b.querySelector(".ct").textContent = n.toLocaleString();
+      b.disabled = !n && !state.strats.has(s);
+      b.title = n ? n + " matching entries" : "No entries match the other filters";
+    });
+  }
+
+  function describeFilters() {
+    const parts = [];
+    if (state.strats.size) parts.push([...state.strats].map(stratLabel).join(" + "));
+    if (state.from || state.to) {
+      parts.push(state.from && state.from === state.to ? state.from
+        : (state.from || allHalves[0]) + "–" + (state.to || allHalves[allHalves.length - 1]));
+    }
+    if (state.holder) parts.push("held by " + state.holder);
+    if (state.deal) parts.push(state.deal === "gp" ? "GP-led only" : "LP stakes only");
+    if (state.conf) parts.push(state.conf === "h" ? "high-confidence labels" : "high/medium-confidence labels");
+    if (state.q.trim()) parts.push("“" + state.q.trim() + "”");
+    if (state.sponsors.length) parts.push(state.sponsors.length === 1 ? state.sponsors[0]
+      : state.sponsors.length + " sponsors");
+    return parts;
+  }
+
+  // ---- strategy chart (top): one line per strategy, filter-aware ----
+  let prChart = null;
+  const PR_MIN_N = 3;     // same cut as scripts/24's by_strategy_half
+  // a light band behind the half-years the period filter keeps
+  const periodBand = {
+    id: "periodBand",
+    beforeDatasetsDraw(chart) {
+      if (!state.from && !state.to) return;
+      const labels = chart.data.labels, x = chart.scales.x, a = chart.chartArea;
+      const i0 = state.from ? labels.indexOf(state.from) : 0;
+      const i1 = state.to ? labels.indexOf(state.to) : labels.length - 1;
+      if (i0 < 0 || i1 < 0) return;
+      const step = labels.length > 1 ? x.getPixelForValue(1) - x.getPixelForValue(0) : a.right - a.left;
+      const left = Math.max(a.left, x.getPixelForValue(i0) - step / 2);
+      const right = Math.min(a.right, x.getPixelForValue(i1) + step / 2);
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.fillStyle = "rgba(196,122,0,0.10)";
+      ctx.fillRect(left, a.top, right - left, a.bottom - a.top);
+      ctx.restore();
+    },
+  };
+  const linkBtn = (text, onClick) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "linkbtn"; b.textContent = text;
+    b.addEventListener("click", onClick);
+    return b;
+  };
+
+  // The strategy chart is the overview: it always spans every half-year (the
+  // period filter shows as a shaded band) and ignores the strategy filter
+  // (unselected strategies fade), so it stays usable for navigation.
+  function renderPrChart(overviewRows) {
+    const halves = allHalves;
+    const byS = groupBy(overviewRows, e => e.s);
+    const datasets = STRAT_LIST.filter(s => byS.has(s)).map(s => {
+      const byH = groupBy(byS.get(s), e => e.h);
+      const rs = halves.map(h => {
+        const st = byH.has(h) ? stats(byH.get(h)) : null;
+        return st && st.n >= PR_MIN_N ? st : null;
+      });
+      if (!rs.some(Boolean)) return null;
+      const on = !state.strats.size || state.strats.has(s);
+      const colr = on ? stratColor(s) : hexA(stratColor(s), 0.22);
       return {
-        label: lab, _rows: rs,
+        label: stratLabel(s), _key: s, _rows: rs,
         data: rs.map(r => r ? r.median * 100 : null),
-        borderColor: col, backgroundColor: col,
-        borderWidth: 1.8, tension: 0.15, spanGaps: true,
-        pointRadius: 3.5, pointHoverRadius: 5,
-        pointBackgroundColor: rs.map(r => r && r.n >= 10 ? col : "#ffffff"),
-        pointBorderColor: col,
+        borderColor: colr, backgroundColor: colr,
+        borderWidth: on ? 2 : 1.2, tension: 0.15, spanGaps: true,
+        pointRadius: on ? 3.5 : 2.5, pointHoverRadius: 6, pointHitRadius: 7,
+        pointBackgroundColor: rs.map(r => r && r.n >= 10 ? colr : "#ffffff"),
+        pointBorderColor: colr,
         segment: {borderDash: c => {
           const a = rs[c.p0DataIndex], b = rs[c.p1DataIndex];
           return (!a || !b || a.n < 10 || b.n < 10) ? [4, 3] : undefined;
         }},
       };
+    }).filter(Boolean);
+    if (prChart) prChart.destroy();
+    prChart = new Chart(document.getElementById("prChart").getContext("2d"), {
+      type: "line",
+      data: {labels: halves, datasets},
+      plugins: [periodBand],
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode: "index", intersect: false},
+        onClick: (evt, _els, chart) => {
+          const hit = chart.getElementsAtEventForMode(evt, "nearest", {intersect: true}, true);
+          if (!hit.length) return;
+          const ds = chart.data.datasets[hit[0].datasetIndex];
+          const half = chart.data.labels[hit[0].index];
+          const r = ds._rows[hit[0].index];
+          state.strats = new Set([ds._key]);
+          state.from = state.to = half;
+          // re-render after Chart.js finishes handling this event (render()
+          // destroys and rebuilds this chart), then describe what is listed
+          setTimeout(() => {
+            render();
+            const note = document.getElementById("pr-drill");
+            note.textContent = "Filtered to " + ds.label + " · " + half +
+              (r ? " (median " + fmtPositionPct(r.median) + ", n=" + r.n + ")" : "");
+            if (state.sponsors.length) {
+              const st = stats(lastTx);
+              note.append(" — the list keeps your sponsor selection: " + lastTx.length +
+                " of them" + (st ? ", median " + fmtPositionPct(st.median) : "") + " · ",
+                linkBtn("show all sponsors", () => { state.sponsors = []; render(); }));
+            }
+            const a = document.createElement("a");
+            a.href = "#transactions"; a.textContent = "see the transactions ↓";
+            note.append(" · ", a, " · ",
+              linkBtn("show all periods", () => { state.from = state.to = ""; render(); }));
+            note.dataset.sig = sigOf();
+          }, 0);
+        },
+        onHover: (evt, _els, chart) => {
+          const hit = chart.getElementsAtEventForMode(evt, "nearest", {intersect: true}, true);
+          evt.native.target.style.cursor = hit.length ? "pointer" : "default";
+        },
+        plugins: {
+          legend: {
+            position: "bottom", labels: {font: {size: 11}, boxWidth: 10},
+            onClick: (_e, item, legend) => {
+              const ds = legend.chart.data.datasets[item.datasetIndex];
+              toggleStrat(ds._key);
+              setTimeout(render, 0);
+            },
+            onHover: e => { e.native.target.style.cursor = "pointer"; },
+            onLeave: e => { e.native.target.style.cursor = "default"; },
+          },
+          tooltip: {callbacks: {
+            label: c => {
+              const r = c.dataset._rows[c.dataIndex];
+              return r ? c.dataset.label + ": median " + fmtPositionPct(r.median) +
+                " (n=" + r.n + (r.n < 10 ? " — small sample" : "") + ")" : null;
+            },
+            afterLabel: c => {
+              const r = c.dataset._rows[c.dataIndex];
+              return r ? "    p25–p75 " + fmtPositionPct(r.p25) + "–" + fmtPositionPct(r.p75) +
+                ", $-weighted " + fmtPositionPct(r.wavg) : null;
+            },
+            footer: () => "Click a point to list these transactions",
+          }},
+        },
+        scales: {
+          x: {ticks: {font: {size: 10}, maxRotation: 0}},
+          y: {ticks: {font: {size: 10}, callback: v => v.toFixed(0) + "%"},
+              title: {display: true, text: "Median entry price, % of NAV", font: {size: 10}}},
+        },
+      },
     });
-  new Chart(document.getElementById("prChart").getContext("2d"), {
-    type: "line",
-    data: {labels: halves, datasets: prDatasets},
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false,
-      interaction: {mode: "index", intersect: false},
-      plugins: {
-        legend: {position: "bottom", labels: {font: {size: 11}, boxWidth: 10}},
-        tooltip: {callbacks: {
-          label: c => {
-            const r = c.dataset._rows[c.dataIndex];
-            return r ? c.dataset.label + ": median " + fmtPositionPct(r.median) +
-              " (n=" + r.n + (r.n < 10 ? " — small sample" : "") + ")" : null;
-          },
-          afterLabel: c => {
-            const r = c.dataset._rows[c.dataIndex];
-            return r ? "    p25–p75 " + fmtPositionPct(r.p25) + "–" + fmtPositionPct(r.p75) +
-              ", $-weighted " + fmtPositionPct(r.wavg) : null;
-          },
-        }},
-      },
-      scales: {
-        x: {ticks: {font: {size: 10}, maxRotation: 0}},
-        y: {ticks: {font: {size: 10}, callback: v => v.toFixed(0) + "%"},
-            title: {display: true, text: "Median entry price, % of NAV", font: {size: 10}}},
-      },
-    },
-  });
+  }
 
+  let prNote = "Hollow points / dashed segments: fewer than 10 observations in that " +
+    "half-year — indicative only (the sample is concentrated 2023H2 onward); " +
+    "half-years with fewer than 3 are not plotted. The chart always spans every " +
+    "half-year; a From/To selection shows as a shaded band and applies to the tables " +
+    "below. Click a legend entry to filter to that strategy, or a point to list the " +
+    "transactions behind it.";
   const dt = {};
   (pr.by_deal_type || []).forEach(r => { dt[r.deal_type] = r; });
-  let prNote = "Hollow points / dashed segments: fewer than 10 observations in that " +
-    "half-year — indicative only (the sample is concentrated 2023H2 onward).";
   if (dt.gp_led && dt.lp_stake) {
     prNote += " GP-led continuation vehicles price closer to NAV: median " +
       fmtPositionPct(dt.gp_led.median) + " (n=" + dt.gp_led.n + ") vs " +
@@ -503,56 +1018,102 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   }
   document.getElementById("pr-note").textContent = prNote;
 
-  const leagueTbl = new Tabulator("#tbl-league", {
-    data: pr.gp_league || [], layout: "fitColumns", height: "440px",
-    initialSort: [{column: "n", dir: "desc"}],
-    selectable: true,
+  // ---- pricing by strategy table ----
+  const pickRow = isPicked => row => {
+    const el = row.getElement();
+    el.classList.add("is-pickable");
+    el.classList.toggle("is-picked", isPicked(row.getData()));
+  };
+  const stratTbl = mkTable("tbl-strat", {
+    data: [], index: "key",
+    placeholder: "No entries match these filters",
+    rowFormatter: pickRow(r => state.strats.has(r.key)),
     columns: [
-      {title: "GP family", field: "family", minWidth: 180},
-      {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 75},
-      {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionPct(c.getValue()), width: 175},
-      {title: "Latest-half median", field: "latest_median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionPct(c.getValue()), width: 150},
-      {title: "Held by", field: "holders", minWidth: 220,
-       formatter: c => (c.getValue() || []).join(", ")},
+      col("Strategy", "strategy", {minWidth: 130, widthGrow: 1.5,
+        formatter: c => '<span class="swatch" style="background:' +
+          stratColor(c.getRow().getData().key) + '"></span>' + c.getValue()}),
+      numCol("Obs", "n", v => v == null ? "" : v.toLocaleString(), {minWidth: 70,
+        headerTooltip: "Clean secondary entries matching the filters"}),
+      numCol("Median price (% of NAV)", "median", fmtPositionPct, {minWidth: 108,
+        headerTooltip: "Median of cost ÷ first reported fair value"}),
+      numCol("25th pct", "p25", fmtPositionPct, {minWidth: 78,
+        headerTooltip: "A quarter of entries priced at or below this"}),
+      numCol("75th pct", "p75", fmtPositionPct, {minWidth: 78,
+        headerTooltip: "A quarter of entries priced at or above this"}),
+      numCol("$-weighted", "wavg", fmtPositionPct, {minWidth: 92,
+        headerTooltip: "Average price weighted by entry fair value — what the dollars paid"}),
+      numCol("Last 12m median", "latest_median", fmtPositionPct, {minWidth: 96,
+        headerTooltip: "Median of entries acquired in the 12 months to the end of the selected period — or to the latest acquisition in the data when no To is set (needs 3+)"}),
+      numCol("GP-led share", "gp_share", fmtPositionPct, {minWidth: 86, visible: hasDeal,
+        headerTooltip: "Share of entries that are GP-led continuation / single-asset vehicles"}),
+      numCol("Sponsors", "n_sponsors", null, {minWidth: 96,
+        headerTooltip: "Distinct GP families among these entries"}),
+      numCol("Entry FV", "fv", fmtMoney, {minWidth: 90,
+        headerTooltip: "Total fair value of these stakes at entry"}),
+      numCol("Low-confidence labels", "low_share", fmtPositionPct, {minWidth: 104, visible: hasConf,
+        headerTooltip: "Share of these entries with a low-confidence strategy label: the sponsor's default or keyword-voted strategy, a generic 'Private Equity' label from the holder, or the holder fund's own mandate. Use the 'Strategy label' filter to exclude them"}),
     ],
   });
+  stratTbl.on("rowClick", (e, row) => { toggleStrat(row.getData().key); render(); });
 
-  // ---- sponsor detail: chart + underlying stakes for selected families ----
-  const entries = pr.entries || [];
-  const entryHalves = [...new Set(entries.map(e => e.h))].sort();
-  const SPON_COLORS = ["#1f5fa6", "#c47a00", "#6d4fa1", "#14803c", "#0f766e",
-                       "#b3382c", "#4b5563", "#8a6d1a"];
-  const medOf = a => {
-    if (!a.length) return null;
-    const s = [...a].sort((x, y) => x - y);
-    return s.length % 2 ? s[(s.length - 1) / 2]
-      : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
-  };
-  let sponChart = null, sponTbl = null;
+  function renderStratTable(baseRows) {
+    const byS = groupBy(baseRows, e => e.s);
+    const rows = STRAT_LIST.filter(s => byS.has(s)).map(s => {
+      const rs = byS.get(s), st = stats(rs);
+      return Object.assign({key: s, strategy: stratLabel(s)}, st, {
+        latest_median: latestMedian(rs),
+        gp_share: rs.filter(e => e.k === "gp").length / rs.length,
+        n_sponsors: new Set(rs.map(e => e.f).filter(Boolean)).size,
+        low_share: hasConf ? rs.filter(e => e.c !== "h" && e.c !== "m").length / rs.length : null,
+      });
+    });
+    stratTbl.replaceData(rows);
+  }
 
-  function renderSpon(fams) {
-    const note = document.getElementById("spon-note");
-    if (!fams.length) {
-      note.textContent = "No sponsors selected — click rows in the league table above (multi-select supported).";
-      if (sponChart) { sponChart.destroy(); sponChart = null; }
-      if (sponTbl) { sponTbl.destroy(); sponTbl = null; }
-      return;
-    }
-    const sel = entries.filter(e => fams.includes(e.f));
-    note.textContent = fams.join(", ") + " — " + sel.length +
-      " clean entries. Hollow points: fewer than 5 observations that half.";
+  // ---- GP-family league ----
+  const leagueTbl = mkTable("tbl-league", {
+    data: [], height: "440px", index: "family",
+    placeholder: "No sponsor has enough matching entries for these filters — lower the minimum above",
+    initialSort: [{column: "n", dir: "desc"}],
+    rowFormatter: pickRow(r => state.sponsors.includes(r.family)),
+    columns: [
+      col("GP family", "family", {minWidth: 170, widthGrow: 1.8, frozen: true, tooltip: textTip}),
+      numCol("Obs", "n", null, {minWidth: 66,
+        headerTooltip: "Clean secondary entries in this sponsor's funds matching the filters"}),
+      numCol("Median price (% of NAV)", "median", fmtPositionPct, {minWidth: 108}),
+      numCol("Last 12m median", "latest_median", fmtPositionPct, {minWidth: 96,
+        headerTooltip: "Median of entries acquired in the 12 months to the end of the selected period — or to the latest acquisition in the data when no To is set (needs 3+)"}),
+      col("Strategy mix", "mix", {minWidth: 150, widthGrow: 1.4, tooltip: textTip,
+        headerTooltip: "Largest strategies among this sponsor's matching entries"}),
+      col("Held by", "holders", {minWidth: 180, widthGrow: 1.8, tooltip: textTip,
+        formatter: c => (c.getValue() || []).join(", ")}),
+    ],
+  });
+  leagueTbl.on("rowClick", (e, row) => { toggleSponsor(row.getData().family); render(); });
 
-    // one line per sponsor + a combined line when 2+ selected
-    const datasets = [];
+  function renderLeague(rows) {
+    const out = [];
+    groupBy(rows.filter(e => e.f), e => e.f).forEach((rs, fam) => {
+      if (rs.length < state.leagueMin) return;
+      out.push({family: fam, n: rs.length, median: medOf(rs.map(e => e.p)),
+                latest_median: latestMedian(rs), mix: mixText(rs),
+                holders: [...new Set(rs.map(e => e.t))].sort()});
+    });
+    leagueTbl.replaceData(out);
+  }
+
+  // ---- transactions: chart + table ----
+  const TX_COLORS = ["#1f5fa6", "#c47a00", "#6d4fa1", "#14803c", "#0f766e",
+                     "#b3382c", "#4b5563", "#8a6d1a"];
+  let txChart = null;
+  function renderTxChart(txRows) {
+    const halves = visibleHalves();
     const mkLine = (label, rows, color, dashed) => {
-      const byH = {};
-      rows.forEach(e => (byH[e.h] = byH[e.h] || []).push(e.p));
-      const pts = entryHalves.map(h => byH[h] || null);
+      const byH = groupBy(rows, e => e.h);
+      const pts = halves.map(h => byH.get(h) || null);
       return {
         label, _n: pts.map(a => a ? a.length : 0),
-        data: pts.map(a => a ? medOf(a) * 100 : null),
+        data: pts.map(a => a ? medOf(a.map(e => e.p)) * 100 : null),
         borderColor: color, backgroundColor: color,
         borderWidth: dashed ? 1.4 : 1.8, tension: 0.15, spanGaps: true,
         borderDash: dashed ? [5, 4] : undefined,
@@ -561,15 +1122,22 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         pointBorderColor: color,
       };
     };
-    fams.slice(0, 8).forEach((f, i) =>
-      datasets.push(mkLine(f, sel.filter(e => e.f === f), SPON_COLORS[i % SPON_COLORS.length], false)));
-    if (fams.length > 1)
-      datasets.push(mkLine("Selected combined", sel, "#131313", true));
-
-    if (sponChart) sponChart.destroy();
-    sponChart = new Chart(document.getElementById("sponChart").getContext("2d"), {
+    const datasets = [];
+    if (state.sponsors.length) {
+      state.sponsors.slice(0, 8).forEach((f, i) =>
+        datasets.push(mkLine(f, txRows.filter(e => e.f === f), TX_COLORS[i % TX_COLORS.length], false)));
+      if (state.sponsors.length > 1) datasets.push(mkLine("Selected combined", txRows, "#131313", true));
+    } else if (state.strats.size) {
+      STRAT_LIST.filter(s => state.strats.has(s)).forEach(s =>
+        datasets.push(mkLine(stratLabel(s), txRows.filter(e => e.s === s), stratColor(s), false)));
+      if (state.strats.size > 1) datasets.push(mkLine("Selected combined", txRows, "#131313", true));
+    } else {
+      datasets.push(mkLine("All matching transactions", txRows, "#131313", false));
+    }
+    if (txChart) txChart.destroy();
+    txChart = new Chart(document.getElementById("txChart").getContext("2d"), {
       type: "line",
-      data: {labels: entryHalves, datasets},
+      data: {labels: halves, datasets},
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: {mode: "index", intersect: false},
@@ -588,45 +1156,167 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         },
       },
     });
-
-    const rows = sel.map(e => ({
-      name: e.n, family: e.f, strategy: e.s, holder: e.t,
-      acq: e.d, price: e.p, fv: e.v,
-    })).sort((a, b) => (b.acq || "").localeCompare(a.acq || ""));
-    if (sponTbl) sponTbl.destroy();
-    sponTbl = new Tabulator("#tbl-spon", {
-      data: rows, layout: "fitColumns", height: "340px",
-      columns: [
-        {title: "Underlying fund", field: "name", minWidth: 220},
-        {title: "Sponsor", field: "family", width: 130},
-        {title: "Strategy", field: "strategy", width: 100},
-        {title: "Holder", field: "holder", width: 90},
-        {title: "Acquired", field: "acq", width: 100},
-        {title: "Price (% NAV)", field: "price", sorter: "number", hozAlign: "right",
-         formatter: c => fmtPositionPct(c.getValue()), width: 120},
-        {title: "Entry FV", field: "fv", sorter: "number", hozAlign: "right",
-         formatter: c => fmtPositionM(c.getValue()), width: 100},
-      ],
-    });
   }
-  leagueTbl.on("rowSelectionChanged", data => renderSpon(data.map(r => r.family)));
 
-  document.getElementById("pr-holder-note").textContent =
-    "Median across each vehicle's clean entries — mixes strategy and vintage, " +
-    "so differences reflect mandate as much as execution.";
-  new Tabulator("#tbl-holder", {
-    data: (pr.by_holder || []).map(r =>
-      Object.assign({}, r, {label: labelByTicker[r.ticker] || r.ticker})),
-    layout: "fitColumns",
-    initialSort: [{column: "median", dir: "asc"}],
+  const txTbl = mkTable("tbl-tx", {
+    data: [], height: "480px",
+    initialSort: [{column: "acq", dir: "desc"}],
+    placeholder: "No transactions match these filters",
     columns: [
-      {title: "Ticker", field: "ticker", width: 100},
-      {title: "Fund", field: "label", minWidth: 220},
-      {title: "Obs", field: "n", sorter: "number", hozAlign: "right", width: 80},
-      {title: "Median price (% of NAV)", field: "median", sorter: "number", hozAlign: "right",
-       formatter: c => fmtPositionPct(c.getValue()), width: 180},
+      col("Acquired", "acq", {minWidth: 96, cssClass: "num", hozAlign: "left",
+        headerTooltip: "Acquisition date the holder reported for the stake"}),
+      col("Underlying fund", "name", {minWidth: 230, widthGrow: 2.6, tooltip: textTip}),
+      col("Sponsor", "family", {minWidth: 130, widthGrow: 1.2, tooltip: textTip}),
+      col("Strategy", "strategy", {minWidth: 104,
+        formatter: c => '<span class="swatch" style="background:' +
+          stratColor(c.getRow().getData().skey) + '"></span>' + c.getValue()}),
+      col("Label confidence", "conf", {minWidth: 106, visible: hasConf,
+        headerTooltip: "How the strategy label was assigned: high = the holder's own specific strategy disclosure or a hand-pinned sponsor; medium = fund-name keywords or the sponsor's disclosed-label majority; low = the sponsor's default or keyword-voted strategy, a generic 'Private Equity' label from the holder, or the holder fund's own mandate"}),
+      col("Holder", "holder", {minWidth: 86, tooltip: (e, c) => {
+        const t = c.getValue(); return t ? tipEl((labelByTicker[t] || t) + " (" + t + ")") : "";
+      }}),
+      col("Deal type", "deal", {minWidth: 92, visible: hasDeal,
+        headerTooltip: "GP-led = continuation / single-asset vehicle (from the fund name); otherwise an LP stake"}),
+      numCol("Price (% of NAV)", "price", fmtPositionPct, {minWidth: 96,
+        headerTooltip: "Cost ÷ first reported fair value of the stake",
+        titleDownload: "Price (% of NAV)",
+        accessorDownload: v => v == null ? "" : +(v * 100).toFixed(2)}),
+      numCol("Entry FV", "fv", fmtPositionM, {minWidth: 90,
+        headerTooltip: "Fair value of the stake at entry (the price denominator)",
+        titleDownload: "Entry FV (USD)"}),
     ],
   });
+  document.getElementById("tx-csv").addEventListener("click", () => {
+    txTbl.download("csv", "gp-stakes-transactions.csv");
+  });
+
+  function renderTx(txRows) {
+    txTbl.replaceData(txRows.map(e => ({
+      acq: e.d, name: e.n, family: e.f, strategy: stratLabel(e.s), skey: e.s,
+      conf: CONF_LABEL[e.c] || "", holder: e.t,
+      deal: e.k === "gp" ? "GP-led" : "LP stake", price: e.p, fv: e.v,
+    })));
+    renderTxChart(txRows);
+
+    const picks = document.getElementById("tx-picks");
+    picks.innerHTML = "";
+    if (state.sponsors.length) {
+      const lab = document.createElement("span");
+      lab.className = "fb-label"; lab.textContent = "Selected sponsors";
+      picks.appendChild(lab);
+      state.sponsors.forEach(f => {
+        const p = document.createElement("span");
+        p.className = "pick";
+        p.append(f + " (" + txRows.filter(e => e.f === f).length + ")");
+        const x = document.createElement("button");
+        x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Remove " + f);
+        x.addEventListener("click", () => { toggleSponsor(f); render(); });
+        p.appendChild(x);
+        picks.appendChild(p);
+      });
+      const clr = document.createElement("button");
+      clr.type = "button"; clr.className = "linkbtn"; clr.textContent = "clear sponsors";
+      clr.addEventListener("click", () => { state.sponsors = []; render(); });
+      picks.appendChild(clr);
+    }
+
+    const what = state.sponsors.length ? "one line per selected sponsor (first 8)"
+      : state.strats.size ? "one line per selected strategy"
+      : "all matching transactions — select strategies or sponsors for separate lines";
+    document.getElementById("tx-note").textContent =
+      "Every clean secondary entry behind the numbers above that matches the filters" +
+      (state.sponsors.length ? " and the selected sponsors" : "") +
+      ". Chart: median entry price per half-year, " + what +
+      "; hollow points have fewer than 5 observations.";
+  }
+
+  // ---- holder table ----
+  const holderTbl = mkTable("tbl-holder", {
+    data: [], index: "ticker",
+    placeholder: "No entries match these filters",
+    initialSort: [{column: "median", dir: "asc"}],
+    rowFormatter: pickRow(r => state.holder === r.ticker),
+    columns: [
+      col("Ticker", "ticker", {minWidth: 90}),
+      col("Fund", "label", {minWidth: 200, widthGrow: 2.4, tooltip: textTip}),
+      numCol("Obs", "n", null, {minWidth: 70}),
+      numCol("Median price (% of NAV)", "median", fmtPositionPct, {minWidth: 108}),
+      numCol("25th pct", "p25", fmtPositionPct, {minWidth: 78}),
+      numCol("75th pct", "p75", fmtPositionPct, {minWidth: 78}),
+      col("Strategy mix", "mix", {minWidth: 150, widthGrow: 1.4, tooltip: textTip,
+        headerTooltip: "Largest strategies among this vehicle's matching entries"}),
+    ],
+  });
+  holderTbl.on("rowClick", (e, row) => {
+    const t = row.getData().ticker;
+    state.holder = state.holder === t ? "" : t;
+    render();
+  });
+  function renderHolder(rows) {
+    const out = [];
+    groupBy(rows, e => e.t).forEach((rs, t) => {
+      const st = stats(rs);
+      out.push({ticker: t, label: labelByTicker[t] || t, n: st.n, median: st.median,
+                p25: st.p25, p75: st.p75, mix: mixText(rs)});
+    });
+    holderTbl.replaceData(out);
+  }
+  document.getElementById("pr-holder-note").textContent =
+    "Median across each vehicle's clean entries that match the filters — mixes strategy " +
+    "and vintage unless you filter, so differences reflect mandate as much as execution. " +
+    "Click a row to filter everything above to that holder.";
+
+  // ---- one render pass for the whole section ----
+  let lastTx = [];
+  function render() {
+    // a search typed moments ago still waiting on its debounce counts too
+    if (qTimer) { clearTimeout(qTimer); qTimer = null; state.q = elQ.value; }
+    ttmAnchorMs = state.to ? Math.min(maxAcqMs, halfEndMs(state.to)) : maxAcqMs;
+    const overview = entries.filter(e => passes(e, {anyStrategy: true, anyPeriod: true}));
+    const base = state.from || state.to                                // all strategies
+      ? overview.filter(e => passes(e, {anyStrategy: true})) : overview;
+    const filtered = state.strats.size ? base.filter(e => state.strats.has(e.s)) : base;
+    const txRows = state.sponsors.length
+      ? filtered.filter(e => state.sponsors.includes(e.f)) : filtered;
+    lastTx = txRows;
+
+    syncControls(base);
+    renderPrChart(overview);
+    renderStratTable(base);
+    renderLeague(filtered);
+    renderTx(txRows);
+    renderHolder(filtered);
+
+    const st = stats(txRows);
+    const desc = describeFilters();
+    const sum = document.getElementById("fb-summary");
+    sum.innerHTML = "";
+    const b = document.createElement("b");
+    b.textContent = txRows.length.toLocaleString();
+    sum.append("Matching transactions: ", b, " of " + entries.length.toLocaleString() +
+      (desc.length ? " (" + desc.join(" · ") + ")" : " — no filters"));
+    if (st) {
+      sum.append(" · median " + fmtPositionPct(st.median) + " of NAV, p25–p75 " +
+        fmtPositionPct(st.p25) + "–" + fmtPositionPct(st.p75) + ", $-weighted " +
+        fmtPositionPct(st.wavg) + " · entry FV " + fmtMoney(st.fv));
+    }
+    document.getElementById("tx-count").textContent = txRows.length.toLocaleString() +
+      " transaction" + (txRows.length === 1 ? "" : "s");
+    // the chart-click note only describes the state that click produced
+    const drill = document.getElementById("pr-drill");
+    if (drill.dataset.sig && drill.dataset.sig !== sigOf()) {
+      drill.textContent = ""; drill.dataset.sig = "";
+    }
+  }
+  const sigOf = () => JSON.stringify([[...state.strats], state.from, state.to, state.holder,
+                                      state.deal, state.conf, state.q, state.sponsors]);
+
+  const fbEl = document.getElementById("pr-filters");
+  const setFbH = () => document.documentElement.style.setProperty("--fb-h", fbEl.offsetHeight + "px");
+  if (window.ResizeObserver) new ResizeObserver(setFbH).observe(fbEl);
+  setFbH();
+
+  Promise.all([stratTbl, leagueTbl, txTbl, holderTbl].map(t => t.built)).then(render);
 });
 </script>
 </body>

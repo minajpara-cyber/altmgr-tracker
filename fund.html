@@ -381,9 +381,17 @@
         }
         let text = '—';
         let cls = 'val';
+        let tooltip = '';
         if (row.kind === 'text') {
           // Plain string — used for source/provenance labels
           if (v) { text = String(v); cls += ' dim'; }
+          else if (row.key === 'unified_return_src'
+                   && q.quarterly_return_rule === 'withheld') {
+            // N-PORT states class returns that cannot be tied to the lead
+            // class (10_extract_nport); the quarter is left blank.
+            text = 'withheld'; cls += ' dim';
+            tooltip = ' title="N-PORT\'s class returns cannot be tied to the lead share class for this fund, so the quarter is left blank rather than filled from the NAV bridge. See Methodology."';
+          }
         } else if (v != null && !Number.isNaN(v)) {
           if (row.kind === 'money') {
             // Show as positive magnitude; if stored as negative, display in parens.
@@ -419,14 +427,14 @@
         // with an "interp" superscript and tinted background so users see
         // these are estimates, not directly reported.
         const interpFields = (q.interpolated_fields || '').split(',').filter(Boolean);
-        let tooltip = '';
         if (interpFields.includes(row.key) && v != null) {
           cls += ' interpolated';
           const src = q.fee_interp_source || '';
           const method = q.fee_interp_method || 'NAV-weighted';
-          // Incentive fees use return-weighting (performance-driven);
-          // others use NAV-weighting.
+          // Incentive fees are return-weighted (performance-driven) where
+          // the quarters have returns; otherwise, like the rest, NAV-weighted.
           const weightNote = (row.key === 'incentive_fee_income_based'
+                              && method.includes('return-weighted')
                               ? 'return-weighted (max(0, quarterly return))'
                               : 'NAV-weighted (avg of BOP/EOP)');
           text = `${text} <sup style="font-size:9px;color:var(--accent);font-weight:600;letter-spacing:0.02em">interp</sup>`;
