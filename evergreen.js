@@ -585,6 +585,9 @@ function renderWatchlist() {
     const health = collection ? `<div class="chart-hint"><b>Monthly collector: ${esc(collection.status)}</b>`
       + ` · checked ${esc((collection.checked_at || "").slice(0,10))}`
       + ` · data through ${esc(collection.latest_month || "unavailable")}`
+      + Object.entries(collection.field_coverage || {}).map(([k,v]) => `<br>${esc(k)}: ${esc(v || "not reported")}`).join("")
+      + (collection.limitations || []).map(x => `<br>${esc(x)}`).join("")
+      + (collection.quarantined_fields?.length ? `<br>${collection.quarantined_fields.length} non-reference-class issue(s) quarantined for review; excluded from the monthly matrix` : "")
       + (collection.calculated_performance_available ? "<br>Calculated NAV change available; reported total return not supplied" : "")
       + (collection.issues || []).map(x => `<br>${esc(x)}`).join("") + "</div>" : "";
     const sources = health + sourceItems.slice(0, 3).join("") + (sourceItems.length > 3
