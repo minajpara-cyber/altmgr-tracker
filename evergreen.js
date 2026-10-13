@@ -204,7 +204,10 @@ function matrixCell(value, metric, seg, i, src) {
       : metric === "reported_redemptions_m" && value != null ? REDEEM_NOTE : "";
   const srcNote = src && i === c.asof.length - 1 ? ` · ${srcTitle(src)}` : "";
   const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}${srcNote}`;
-  const classes = [valueClass, provisional ? "matrix-provisional" : "", value == null ? "matrix-missing" : ""]
+  const provisionalFlow = metric.startsWith("flow")
+    && (c.flow_status || [])[i] === "provisional_aum_rollforward" && value != null;
+  const classes = [valueClass, provisional || provisionalFlow ? "matrix-provisional" : "",
+                   value == null ? "matrix-missing" : ""]
     .filter(Boolean).join(" ");
   return `<td class="${classes}" title="${esc(title)}">${formatted}</td>`;
 }
@@ -498,8 +501,11 @@ function drawChart(id, data, scales) {
 function monthTable(seg) {
   const c = seg.cols, ccy = seg.ccy;
   const hasWorkbookFlow = (c.flow_status || []).some(x => x === "provisional_workbook_flow");
-  const head = ["Month", "NAV / share", "Return", "Fund size", "Size change",
-                "Performance effect", hasWorkbookFlow ? "Flow estimate" : "NAV residual (est.)", "% of NAV"];
+  // Hamilton Lane's international funds: net subscriptions rolled forward from a
+  // printed size that includes the next dealing's subscriptions (script 38).
+  const hasRollforward = (c.flow_status || []).some(x => (x || "").endsWith("aum_rollforward"));
+  const head = ["Month", "NAV / share", "Return", "Fund size", "Size change", "Performance effect",
+                hasWorkbookFlow || hasRollforward ? "Flow estimate" : "NAV residual (est.)", "% of NAV"];
   const subs = hasSubs(c), reinvest = hasReinvest(c), redeem = hasRedeem(c);
   if (subs) head.push(`<span title="${esc(SUBS_NOTE)}">Gross subscriptions (reported)</span>`);
   if (reinvest) head.push("Reinvested distributions (reported)");

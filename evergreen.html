@@ -223,6 +223,11 @@
       rounding and capital timing can affect the result. New manager series show estimated external net capital
       flow only when cash distributions net of reinvestment are verified. Class returns are labeled proxies;
       source-specific qualifications appear beside each observation. Audited gross flows remain on Statements.
+      Hamilton Lane's international funds print no net assets, only a fund size that includes the net
+      subscriptions received for the next dealing date, so their flow estimate is that size minus the previous
+      month's size grown by the lead class's return. Each build checks it against the fund's audited net flows:
+      where it matches it is shown as is, where it does not each audited half-year is adjusted to its audited
+      total and later months are marked provisional, and a fund with no audited period to check is left blank.
     </p>
   </section>
 
@@ -258,6 +263,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./evergreen.js?v=20261013-1"></script>
+<script src="./evergreen.js?v=20261013-2"></script>
 </body>
 </html>
