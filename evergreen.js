@@ -70,15 +70,19 @@ const REDEEM_NOTE = "Redemptions / repurchases as stated in the fund's N-PORT fi
   + "(published quarterly, about 60 days after quarter-end).";
 // A fact card prints AUM, rounded ($6.4B), not total net assets: script 38
 // shows it in the NAV / AUM* row and never differences it into a flow.
-const aumNote = (precision, ccy) => "AUM printed on the manager's fact card"
+const AUM_STAR = new Set(["unverified_nav_or_aum", "aum", "aum_incl_next_subscriptions"]);
+const aumNote = (precision, ccy, measure) => (measure === "aum_incl_next_subscriptions"
+    ? "Fund size printed in the monthly report: current NAV plus the net subscriptions received "
+      + "for the next dealing date"
+    : "AUM printed on the manager's fact card")
   + (precision != null ? `, rounded to about ±${sym(ccy)}${precision}m` : "")
   + "; not verified as total net assets and never used for implied flows";
 // The fund table's size carries the matrix's asterisk when it is not total net
 // assets (a fact card's AUM, or a workbook figure not established as one).
 const sizeMark = f => f.latest_size_m == null || !f.latest_size_measure
   || f.latest_size_measure === "total_net_assets" ? ""
-  : `<span title="${esc(f.latest_size_measure === "aum"
-      ? aumNote(null, f.ccy)
+  : `<span title="${esc(f.latest_size_measure === "aum" || f.latest_size_measure === "aum_incl_next_subscriptions"
+      ? aumNote(null, f.ccy, f.latest_size_measure)
       : "Reported size not established as total net assets (AUM or an unverified figure); "
         + "never used for implied flows")}">*</span>`;
 const hasSubs = c => (c.reported_subscriptions_m || []).some(v => v != null);
@@ -191,8 +195,9 @@ function matrixCell(value, metric, seg, i, src) {
   const effective = (c.subscriptions_effective || [])[i];
   const note = metric === "calculated_nav_change_pct"
     ? "Calculated from consecutive published NAV/share; not a reported total return and not used for implied flows"
-    : metric === "size" && value != null && (c.nav_measure || [])[i] === "aum"
-      ? aumNote((c.nav_precision_m || [])[i], ccy)
+    : metric === "size" && value != null
+        && ["aum", "aum_incl_next_subscriptions"].includes((c.nav_measure || [])[i])
+      ? aumNote((c.nav_precision_m || [])[i], ccy, (c.nav_measure || [])[i])
     : metric === "flow" ? (c.flow_note || [])[i]
     : metric === "reported_subscriptions_m" && value != null
       ? `${effective ? `effective ${effective} · ` : ""}${SUBS_NOTE}`
@@ -239,9 +244,10 @@ function renderMatrix() {
   for (const {f, seg, manager: managerKeyValue} of blocks) {
     const byMonth = new Map((seg.cols.asof || []).map((asof, i) => [asof, i]));
     const src = isLatestSeg(f, seg) ? f.latest_source : null;
-    // The asterisk covers both sizes not verified as total net assets: a
-    // workbook figure that may be AUM, and the AUM a fact card prints.
-    const sizeLabel = (seg.cols.nav_measure || []).some(x => x === "unverified_nav_or_aum" || x === "aum")
+    // The asterisk covers every size not verified as total net assets: a
+    // workbook figure that may be AUM, the AUM a fact card prints, and Hamilton
+    // Lane's international fund size (NAV plus the next dealing's subscriptions).
+    const sizeLabel = (seg.cols.nav_measure || []).some(x => AUM_STAR.has(x))
       ? "NAV / AUM*" : "Fund NAV";
     const metrics = [
       ["size", sizeLabel], ["ret", "Performance"], ["flow", "Implied flow"],
