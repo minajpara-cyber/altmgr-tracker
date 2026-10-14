@@ -17,6 +17,8 @@
   .controls-row { margin: 10px 0; }
   .controls-row label { font-family: var(--mono); font-size: 12px; }
   .controls-row select { width: auto; min-width: 320px; max-width: 100%; }
+  .controls-row.vc-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .vc-controls .unit-toggle { margin-top: 0; font-size: 12px; }
   .footnote { font-size: 11.5px; color: var(--text-faint); margin: 8px 0 4px; line-height: 1.5; }
 
   /* ---- readable, resizable tables ------------------------------------- */
@@ -205,10 +207,14 @@
     </div>
   </div>
 
-  <div class="controls-row">
+  <div class="controls-row vc-controls">
     <label>Fund:
       <select id="vc-fund"></select>
     </label>
+    <div class="unit-toggle" id="vc-view" role="radiogroup" aria-label="Chart view">
+      <label><input type="radio" name="vc-view" value="period" checked> Per period</label>
+      <label><input type="radio" name="vc-view" value="cum"> Cumulative</label>
+    </div>
   </div>
   <div class="chart-wrap short"><canvas id="vcChart"></canvas></div>
   <p class="chart-hint" id="vc-skip-note"></p>
@@ -500,6 +506,10 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   const vcByT = {};
   vc.periods.forEach(r => { (vcByT[r.ticker] = vcByT[r.ticker] || []).push(r); });
   Object.values(vcByT).forEach(a => a.sort((x, y) => x.period_end < y.period_end ? -1 : 1));
+  // a "bridged" half-year has no per-position cost of its own; scripts/23
+  // splits it together with the next half-year, so the chart folds it into
+  // that period's column (bridged_from = the 12-month window's start)
+  const vcLabel = r => r.period_end.slice(0, 7) + (r.bridged_from ? " (12m)" : "");
   const usableCount = t => (vcByT[t] || []).filter(r => USABLE.has(r.flag)).length;
   const compCount = t => (vcByT[t] || []).filter(r => r.new_markup != null).length;
 
@@ -532,29 +542,65 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     });
 
   let vcChart = null;
+  const vcView = document.getElementById("vc-view");
   function renderVC() {
     const t = vcSel.value;
-    const rows = vcByT[t] || [];
-    const labels = rows.map(r => r.period_end.slice(0, 7));
+    const cum = vcView.querySelector("input:checked").value === "cum";
+    const all = vcByT[t] || [];
+    const rows = all.filter(r => r.flag !== "bridged");
+    const labels = rows.map(vcLabel);
     const use = rows.map(r => USABLE.has(r.flag));
-    const mk = rows.map((r, i) => use[i] ? r.new_markup : null);
-    const ha = rows.map((r, i) => use[i] ? r.held_appreciation : null);
-    const un = rows.map((r, i) => use[i] && r.exit_unwind != null ? -r.exit_unwind : null);
-    const st = rows.map(r => r.stmt_unrealized_change);
-    // periods without per-position cost still have the fund's own reported
-    // Δ unrealized — draw it as a grey bar so the history isn't blank
-    // (most funds only began disclosing per-position cost in 2024–25)
-    const tot = rows.map((r, i) =>
-      !use[i] && r.stmt_unrealized_change != null ? r.stmt_unrealized_change : null);
+    let mk, ha, un, tot, st;
+    if (!cum) {
+      mk = rows.map((r, i) => use[i] ? r.new_markup : null);
+      ha = rows.map((r, i) => use[i] ? r.held_appreciation : null);
+      un = rows.map((r, i) => use[i] && r.exit_unwind != null ? -r.exit_unwind : null);
+      st = rows.map(r => r.stmt_unrealized_change);
+      // periods without per-position cost still have the fund's own reported
+      // Δ unrealized — draw it as a grey bar so the history isn't blank
+      // (most funds only began disclosing per-position cost in 2024–25)
+      tot = rows.map((r, i) =>
+        !use[i] && r.stmt_unrealized_change != null ? r.stmt_unrealized_change : null);
+    } else {
+      // running totals. Every split period counts, recon misses included, so
+      // the last bar equals the fund's row in the cumulative table below;
+      // periods with no split add their statement Δ unrealized to the grey
+      // bar, keeping the stack level with the cumulative statement line
+      let cMk = 0, cHa = 0, cUn = 0, cTot = 0, cSt = 0, on = false, stOn = false;
+      mk = []; ha = []; un = []; tot = []; st = [];
+      rows.forEach(r => {
+        if (r.new_markup != null) {
+          cMk += r.new_markup; cHa += r.held_appreciation; cUn += r.exit_unwind; on = true;
+        } else if (r.stmt_unrealized_change != null) {
+          cTot += r.stmt_unrealized_change; on = true;
+        }
+        if (r.stmt_unrealized_change != null) { cSt += r.stmt_unrealized_change; stOn = true; }
+        mk.push(on ? cMk : null); ha.push(on ? cHa : null); un.push(on ? -cUn : null);
+        tot.push(on && cTot ? cTot : null); st.push(stOn ? cSt : null);
+      });
+    }
 
     const skipped = {};
     rows.forEach((r, i) => { if (!use[i]) (skipped[r.flag] = skipped[r.flag] || []).push(labels[i]); });
     const parts = Object.entries(skipped)
       .map(([f, ps]) => ps.join(", ") + " (" + (FLAG_REASON[f] || f) + ")");
+    const bridges = rows.filter(r => r.bridged_from).map(r => {
+      const gap = all.filter(b => b.flag === "bridged" &&
+        b.period_end > r.bridged_from && b.period_end < r.period_end);
+      return vcLabel(r) + " spans " + r.bridged_from.slice(0, 7) + " → " + r.period_end.slice(0, 7) +
+        ": the " + gap.map(b => b.period_end.slice(0, 7)).join(", ") +
+        " report has no per-position cost, so both half-years are split together" +
+        " (its day-one markup includes up to six months of mark movement after purchase)";
+    });
     const nUse = use.filter(Boolean).length;
     document.getElementById("vc-skip-note").textContent =
       (nUse === 0 ? "No period passes the decomposition gates for this fund — grey bars show its reported Δ unrealized without the markup/appreciation split. " : "") +
-      (parts.length ? "Not decomposed: " + parts.join("; ") + ". Dots = statement Δ unrealized, shown wherever reported." : "");
+      (parts.length ? (cum ? "Not split" : "Not decomposed") + ": " + parts.join("; ") + ". " : "") +
+      (bridges.length ? bridges.join("; ") + ". " : "") +
+      (cum ? "Cumulative view: running totals since the first reported period. Every split period counts, " +
+             "including any that miss the reconciliation gate, so the last bar matches the table below; " +
+             "periods without a split add their reported Δ unrealized to the grey bar. Line = cumulative statement Δ unrealized."
+           : (parts.length ? "Dots = statement Δ unrealized, shown wherever reported." : ""));
 
     if (vcChart) vcChart.destroy();
     vcChart = new Chart(document.getElementById("vcChart").getContext("2d"), {
@@ -570,8 +616,9 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
           {type: "bar", label: "Δ unrealized (split unavailable)", data: tot, stack: "vc",
            backgroundColor: "rgba(170,170,170,0.30)",
            borderColor: "rgba(120,120,120,0.7)", borderWidth: 1},
-          {type: "line", label: "Statement Δ unrealized", data: st, showLine: false,
-           pointStyle: "rectRot", pointRadius: 4, pointHoverRadius: 5,
+          {type: "line", label: "Statement Δ unrealized" + (cum ? " (cumulative)" : ""), data: st,
+           showLine: cum, spanGaps: true, borderWidth: 1.5,
+           pointStyle: "rectRot", pointRadius: cum ? 3 : 4, pointHoverRadius: 5,
            borderColor: "#131313", backgroundColor: "#131313"},
         ],
       },
@@ -583,13 +630,28 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
           tooltip: {
             filter: item => item.raw != null,
             callbacks: {
+              title: items => {
+                if (!items.length) return "";
+                const r = rows[items[0].dataIndex];
+                if (cum) return "Cumulative to " + r.period_end.slice(0, 7);
+                return r.bridged_from
+                  ? r.bridged_from.slice(0, 7) + " → " + r.period_end.slice(0, 7) + " (12 months)"
+                  : labels[items[0].dataIndex];
+              },
               label: c => c.datasetIndex === 2
-                ? "Unwound out of unrealized: " + fmtSM(-c.raw)
+                ? "Unwound out of unrealized" + (cum ? " to date" : "") + ": " + fmtSM(-c.raw)
                 : c.dataset.label + ": " + fmtSM(c.raw),
               footer: items => {
                 if (!items.length) return "";
-                const r = rows[items[0].dataIndex];
-                return (r.recon_ratio != null ? "recon ratio " + r.recon_ratio.toFixed(2) + " · " : "") + r.flag;
+                const i = items[0].dataIndex, r = rows[i];
+                const flag = (r.recon_ratio != null ? "recon ratio " + r.recon_ratio.toFixed(2) + " · " : "") + r.flag;
+                if (!cum) return flag;
+                // same guard as scripts/23: a share is shown only when the
+                // total isn't a small residual of offsetting parts
+                const m = mk[i], h = ha[i], gross = Math.abs(m) + Math.abs(h);
+                const share = m != null && m + h > 0 && m + h >= 0.5 * gross
+                  ? "Day-one share of value creation to date: " + (100 * m / (m + h)).toFixed(0) + "%" : "";
+                return [share, "this period: " + flag].filter(Boolean).join("\n");
               },
             },
           },
@@ -597,12 +659,14 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         scales: {
           x: {stacked: true, ticks: {font: {size: 10}, maxRotation: 0, autoSkip: true}},
           y: {stacked: true, ticks: {font: {size: 10}, callback: v => fmtSM(v)},
-              title: {display: true, text: "$ per semi-annual period", font: {size: 10}}},
+              title: {display: true, font: {size: 10},
+                      text: cum ? "$ cumulative" : "$ per semi-annual period"}},
         },
       },
     });
   }
   vcSel.addEventListener("change", renderVC);
+  vcView.addEventListener("change", renderVC);
   if (vcSel.options.length) renderVC();
 
   const vcRows = vc.cumulative.map(r => Object.assign({}, r, {
@@ -623,7 +687,7 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
           return r.window_from ? r.window_from.slice(0, 7) + " → " + (r.window_to || "").slice(0, 7) : "";
         }}),
       numCol("Periods", "periods_used", null, {minWidth: 92,
-        headerTooltip: "Semi-annual periods included in the cumulative totals"}),
+        headerTooltip: "Semi-annual periods included in the cumulative totals (a 12-month bridged split counts as two)"}),
       col("Recon pass", "recon", {minWidth: 88, hozAlign: "right", cssClass: "num",
         headerTooltip: "Periods passing the ±15% reconciliation gate ÷ periods where the split could be computed"}),
       numCol("Day-one markup", "cum_markup", fmtSM, {minWidth: 108,
@@ -651,10 +715,12 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     "Reconciliation status: per period, day-one markup + held appreciation − unwound must land " +
     "within ±15% of the statement of operations' change in unrealized appreciation " +
     "(FX forwards, deferred taxes and expense noise sit outside the position panel). " +
-    "Of " + vc.periods.length + " fund-periods, " + nComp + " are computable; " +
+    "Of " + vc.periods.length + " fund-periods, " + nComp + " are computable" +
+    (flagN.bridged ? " (" + flagN.bridged + " of them 12-month splits that bridge a half-year whose " +
+      "report lacks per-position cost, reconciled against both halves' statements)" : "") + "; " +
     ((flagN.ok || 0) + (flagN.ok_small || 0)) + " pass the gate (" + (flagN.ok_small || 0) +
     " via the small-statement absolute test) and " + (flagN.recon_miss || 0) +
-    " miss it — misses are excluded from the chart but included in the cumulative table. " +
+    " miss it — misses are excluded from the per-period chart but included in the cumulative chart and table. " +
     "Not computable: " + (flagN.na_cost || 0) + " periods with cost disclosed for under 70% of " +
     "fair value, " + (flagN.first_period || 0) + " first-coverage periods. “Value creation” " +
     "= day-one markup + held appreciation; realized (unwound) is appreciation those totals already " +
