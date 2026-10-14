@@ -179,14 +179,19 @@
 
   <h2 id="value-creation">Value creation — day-one markup vs later appreciation</h2>
   <p class="chart-hint">
-    Each fund's semi-annual gains split into three parts: <b>day-one markup</b>
-    (fair value over cost on newly appearing secondary purchases — buy at a
-    discount, immediately mark at the GP's NAV), <b>held appreciation</b>
-    (mark movement on positions held across both period-ends, net of
-    follow-ons / returns of capital) and <b>realized&nbsp;/&nbsp;unwound</b>
-    (appreciation of exiting positions leaving the unrealized bucket as it
-    converts to realized). The split is validated per period against the
-    fund's own statement of operations (dots on the chart).
+    Each fund's semi-annual investment gain (realized + unrealized) split into
+    <b>day-one markup</b> (fair value over cost on newly appearing secondary
+    purchases — buy at a discount, immediately mark at the GP's NAV) and
+    <b>appreciation</b> after purchase, in two parts: <b>still unrealized</b>
+    (mark movement on holdings kept across both period-ends, net of
+    follow-ons / returns of capital) and <b>realized</b> (the fund's reported
+    realized gains — mostly distributions from stakes it still holds — less
+    the paper gain it had already booked on holdings it exited, so nothing is
+    counted twice). The unrealized split is validated per period against the
+    fund's statement of operations; realized gains are the statement's own,
+    cross-checked against the fund's N-PORT filings. A fund's launch
+    period counts too: its first report holds only purchases made since
+    launch, so their paper gain is day-one markup.
   </p>
 
   <div class="stat-row">
@@ -196,14 +201,14 @@
       <div class="sub" id="vc-share-sub"></div>
     </div>
     <div class="stat-card">
-      <div class="label">Cumulative unrealized value creation</div>
+      <div class="label">Cumulative value creation</div>
       <div class="value" id="vc-total">…</div>
-      <div class="sub">day-one markup + held appreciation</div>
+      <div class="sub">day-one markup + appreciation, realized and unrealized</div>
     </div>
     <div class="stat-card">
-      <div class="label">Watched converting to realized</div>
+      <div class="label">Realized gains (fund-reported)</div>
       <div class="value" id="vc-realized">…</div>
-      <div class="sub">appreciation unwound on exits</div>
+      <div class="sub" id="vc-realized-sub">from the funds' statements</div>
     </div>
   </div>
 
@@ -499,32 +504,50 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   const vc = d.value_creation || {periods: [], cumulative: []};
   const USABLE = new Set(["ok", "ok_small"]);
   const FLAG_REASON = {
-    first_period: "first covered period — coverage start, not new buys",
-    na_cost: "per-position cost not disclosed — most funds only added it in 2024–25; grey bar = reported Δ unrealized, unsplit",
+    first_period: "coverage start — the fund launched before its first report here, so its new buys can't be told from older holdings",
+    launch_na_cost: "launch period, but per-position cost not disclosed — grey bar = its total gain, unsplit",
+    na_cost: "per-position cost not disclosed — most funds only added it in 2024–25; grey bar = the fund's total gain, unsplit",
     recon_miss: "fails the ±15% reconciliation gate",
   };
+  const reasonKey = r => r.launch_date && r.flag === "na_cost" ? "launch_na_cost" : r.flag;
+  const fmtM1 = v => "$" + (Math.abs(v) / 1e6).toFixed(1) + "m";
+  // the fund's total investment gain for a period: realized (statement, else
+  // N-PORT) + the statement's change in unrealized
+  const totalGain = r => r.realized_gain != null && r.stmt_unrealized_change != null
+    ? r.realized_gain + r.stmt_unrealized_change : null;
   const vcByT = {};
   vc.periods.forEach(r => { (vcByT[r.ticker] = vcByT[r.ticker] || []).push(r); });
   Object.values(vcByT).forEach(a => a.sort((x, y) => x.period_end < y.period_end ? -1 : 1));
   // a "bridged" half-year has no per-position cost of its own; scripts/23
   // splits it together with the next half-year, so the chart folds it into
-  // that period's column (bridged_from = the 12-month window's start)
-  const vcLabel = r => r.period_end.slice(0, 7) + (r.bridged_from ? " (12m)" : "");
+  // that period's column (bridged_from = the 12-month window's start). A
+  // fund's launch period (launch_date = commencement of operations) splits
+  // as all new purchases, so it gets its own label
+  const vcLabel = r => r.period_end.slice(0, 7) +
+    (r.bridged_from ? " (12m)" : r.launch_date ? " (launch)" : "");
   const usableCount = t => (vcByT[t] || []).filter(r => USABLE.has(r.flag)).length;
   const compCount = t => (vcByT[t] || []).filter(r => r.new_markup != null).length;
 
-  // headline stat: aggregate day-one markup share across funds
-  let aggMk = 0, aggHeld = 0, aggReal = 0, nFundsComp = 0;
+  // headline stats: day-one markup share of total value creation (realized
+  // and unrealized) across funds; realized gains with their N-PORT check
+  let aggMk = 0, aggApp = 0, aggReal = 0, nFundsComp = 0, nChk = 0, nChkOk = 0;
   vc.cumulative.forEach(r => {
     if (r.cum_markup == null) return;
-    aggMk += r.cum_markup; aggHeld += r.cum_held; aggReal += r.cum_realized; nFundsComp++;
+    aggMk += r.cum_markup; aggApp += r.cum_appreciation; aggReal += r.cum_realized_gain; nFundsComp++;
+    if (r.nport_periods && Math.abs(r.cum_stmt_realized_nport_periods) >= 1e6) {
+      nChk++;
+      const s = r.cum_stmt_realized_nport_periods, n = r.cum_nport_realized;
+      if (Math.abs(n - s) <= 0.05 * Math.abs(s)) nChkOk++;
+    }
   });
   document.getElementById("vc-share").textContent =
-    aggMk + aggHeld > 0 ? (100 * aggMk / (aggMk + aggHeld)).toFixed(0) + "%" : "—";
+    aggMk + aggApp > 0 ? (100 * aggMk / (aggMk + aggApp)).toFixed(0) + "%" : "—";
   document.getElementById("vc-share-sub").textContent =
     "across " + nFundsComp + " funds with decomposable periods";
-  document.getElementById("vc-total").textContent = fmtMoney(aggMk + aggHeld);
+  document.getElementById("vc-total").textContent = fmtMoney(aggMk + aggApp);
   document.getElementById("vc-realized").textContent = fmtMoney(aggReal);
+  if (nChk) document.getElementById("vc-realized-sub").textContent =
+    "from the funds' statements · N-PORT within 5% for " + nChkOk + " of " + nChk + " funds";
 
   // fund selector: most chartable periods first
   const cumByT = {};
@@ -550,40 +573,54 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
     const rows = all.filter(r => r.flag !== "bridged");
     const labels = rows.map(vcLabel);
     const use = rows.map(r => USABLE.has(r.flag));
-    let mk, ha, un, tot, st;
+    let mk, ha, ra, tot, st;
     if (!cum) {
       mk = rows.map((r, i) => use[i] ? r.new_markup : null);
       ha = rows.map((r, i) => use[i] ? r.held_appreciation : null);
-      un = rows.map((r, i) => use[i] && r.exit_unwind != null ? -r.exit_unwind : null);
-      st = rows.map(r => r.stmt_unrealized_change);
+      ra = rows.map((r, i) => use[i] ? r.realized_apprec : null);
+      st = rows.map(totalGain);
       // periods without per-position cost still have the fund's own reported
-      // Δ unrealized — draw it as a grey bar so the history isn't blank
+      // total gain — draw it as a grey bar so the history isn't blank
       // (most funds only began disclosing per-position cost in 2024–25)
-      tot = rows.map((r, i) =>
-        !use[i] && r.stmt_unrealized_change != null ? r.stmt_unrealized_change : null);
+      tot = rows.map((r, i) => !use[i] ? totalGain(r) : null);
     } else {
       // running totals. Every split period counts, recon misses included, so
       // the last bar equals the fund's row in the cumulative table below;
-      // periods with no split add their statement Δ unrealized to the grey
-      // bar, keeping the stack level with the cumulative statement line
-      let cMk = 0, cHa = 0, cUn = 0, cTot = 0, cSt = 0, on = false, stOn = false;
-      mk = []; ha = []; un = []; tot = []; st = [];
+      // periods with no split add their total gain to the grey bar, keeping
+      // the stack level with the cumulative statement line
+      let cMk = 0, cHa = 0, cRa = 0, cTot = 0, cSt = 0, on = false, stOn = false;
+      mk = []; ha = []; ra = []; tot = []; st = [];
       rows.forEach(r => {
+        const g = totalGain(r);
         if (r.new_markup != null) {
-          cMk += r.new_markup; cHa += r.held_appreciation; cUn += r.exit_unwind; on = true;
-        } else if (r.stmt_unrealized_change != null) {
-          cTot += r.stmt_unrealized_change; on = true;
+          cMk += r.new_markup; cHa += r.held_appreciation; cRa += r.realized_apprec || 0; on = true;
+        } else if (g != null) {
+          cTot += g; on = true;
         }
-        if (r.stmt_unrealized_change != null) { cSt += r.stmt_unrealized_change; stOn = true; }
-        mk.push(on ? cMk : null); ha.push(on ? cHa : null); un.push(on ? -cUn : null);
+        if (g != null) { cSt += g; stOn = true; }
+        mk.push(on ? cMk : null); ha.push(on ? cHa : null); ra.push(on ? cRa : null);
         tot.push(on && cTot ? cTot : null); st.push(stOn ? cSt : null);
       });
     }
 
     const skipped = {};
-    rows.forEach((r, i) => { if (!use[i]) (skipped[r.flag] = skipped[r.flag] || []).push(labels[i]); });
+    rows.forEach((r, i) => {
+      if (!use[i]) (skipped[reasonKey(r)] = skipped[reasonKey(r)] || [])
+        .push(r.launch_date ? r.period_end.slice(0, 7) : labels[i]);
+    });
     const parts = Object.entries(skipped)
       .map(([f, ps]) => ps.join(", ") + " (" + (FLAG_REASON[f] || f) + ")");
+    // a split launch period: everything in it was bought since launch, except
+    // a predecessor's book carried in by reorganization (HLNE_PAF)
+    const launch = rows.find(r => r.launch_date && r.new_markup != null);
+    const launchNote = !launch ? "" : launch.carried_in_unrealized != null
+      ? launch.period_end.slice(0, 7) + " is the launch period: operations began " + launch.launch_date +
+        " with a predecessor fund's holdings, carried in by reorganization with " +
+        fmtM1(launch.carried_in_unrealized) + " of unrealized appreciation that came through capital, " +
+        "not the statement. Holdings bought since are day-one markup; the predecessor's count only " +
+        "for their movement since the transfer, as appreciation"
+      : launch.period_end.slice(0, 7) + " is the launch period (operations began " + launch.launch_date +
+        "): every holding was bought in it, so its paper gain is all day-one markup";
     const bridges = rows.filter(r => r.bridged_from).map(r => {
       const gap = all.filter(b => b.flag === "bridged" &&
         b.period_end > r.bridged_from && b.period_end < r.period_end);
@@ -593,14 +630,17 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         " (its day-one markup includes up to six months of mark movement after purchase)";
     });
     const nUse = use.filter(Boolean).length;
+    const noReal = rows.filter((r, i) => use[i] && r.realized_gain == null).map(vcLabel);
     document.getElementById("vc-skip-note").textContent =
-      (nUse === 0 ? "No period passes the decomposition gates for this fund — grey bars show its reported Δ unrealized without the markup/appreciation split. " : "") +
+      (nUse === 0 ? "No period passes the decomposition gates for this fund — grey bars show its total gain without the markup/appreciation split. " : "") +
+      (launchNote ? launchNote + ". " : "") +
       (parts.length ? (cum ? "Not split" : "Not decomposed") + ": " + parts.join("; ") + ". " : "") +
       (bridges.length ? bridges.join("; ") + ". " : "") +
+      (noReal.length ? "No realized-gain figure for " + noReal.join(", ") + " (no statement or full N-PORT coverage) — its realized part is left out. " : "") +
       (cum ? "Cumulative view: running totals since the first reported period. Every split period counts, " +
              "including any that miss the reconciliation gate, so the last bar matches the table below; " +
-             "periods without a split add their reported Δ unrealized to the grey bar. Line = cumulative statement Δ unrealized."
-           : (parts.length ? "Dots = statement Δ unrealized, shown wherever reported." : ""));
+             "periods without a split add their total gain to the grey bar. Line = cumulative total gain per the fund's statements."
+           : "Dots = total gain per the fund's statement (realized + change in unrealized).");
 
     if (vcChart) vcChart.destroy();
     vcChart = new Chart(document.getElementById("vcChart").getContext("2d"), {
@@ -609,14 +649,14 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         datasets: [
           {type: "bar", label: "Day-one markup", data: mk, stack: "vc",
            backgroundColor: "rgba(196,122,0,0.8)"},
-          {type: "bar", label: "Held appreciation", data: ha, stack: "vc",
+          {type: "bar", label: "Appreciation — still unrealized", data: ha, stack: "vc",
            backgroundColor: "rgba(31,95,166,0.7)"},
-          {type: "bar", label: "Realized — unwound from unrealized", data: un, stack: "vc",
-           backgroundColor: "rgba(120,120,120,0.55)"},
-          {type: "bar", label: "Δ unrealized (split unavailable)", data: tot, stack: "vc",
+          {type: "bar", label: "Appreciation — realized", data: ra, stack: "vc",
+           backgroundColor: "rgba(46,139,87,0.72)"},
+          {type: "bar", label: "Total gain (split unavailable)", data: tot, stack: "vc",
            backgroundColor: "rgba(170,170,170,0.30)",
            borderColor: "rgba(120,120,120,0.7)", borderWidth: 1},
-          {type: "line", label: "Statement Δ unrealized" + (cum ? " (cumulative)" : ""), data: st,
+          {type: "line", label: "Total gain per fund statement" + (cum ? " (cumulative)" : ""), data: st,
            showLine: cum, spanGaps: true, borderWidth: 1.5,
            pointStyle: "rectRot", pointRadius: cum ? 3 : 4, pointHoverRadius: 5,
            borderColor: "#131313", backgroundColor: "#131313"},
@@ -634,23 +674,34 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
                 if (!items.length) return "";
                 const r = rows[items[0].dataIndex];
                 if (cum) return "Cumulative to " + r.period_end.slice(0, 7);
+                if (r.launch_date) return "Launch period: " + r.launch_date + " → " + r.period_end;
                 return r.bridged_from
                   ? r.bridged_from.slice(0, 7) + " → " + r.period_end.slice(0, 7) + " (12 months)"
                   : labels[items[0].dataIndex];
               },
-              label: c => c.datasetIndex === 2
-                ? "Unwound out of unrealized" + (cum ? " to date" : "") + ": " + fmtSM(-c.raw)
-                : c.dataset.label + ": " + fmtSM(c.raw),
+              label: c => c.dataset.label + ": " + fmtSM(c.raw),
               footer: items => {
                 if (!items.length) return "";
                 const i = items[0].dataIndex, r = rows[i];
                 const flag = (r.recon_ratio != null ? "recon ratio " + r.recon_ratio.toFixed(2) + " · " : "") + r.flag;
-                if (!cum) return flag;
+                if (!cum) {
+                  // where the realized part comes from, and its N-PORT check
+                  const out = [];
+                  if (r.realized_gain != null)
+                    out.push("Realized gain reported: " + fmtSM(r.realized_gain) +
+                      (r.realized_source === "nport" ? " (N-PORT; no statement)" : " (statement)") +
+                      (r.nport_realized != null && r.realized_source !== "nport"
+                        ? " · N-PORT " + fmtSM(r.nport_realized) : ""));
+                  if (r.exit_unwind != null && use[i] && !r.launch_date)  // a launch has no exits
+                    out.push("less paper gain already booked on exits: " + fmtSM(r.exit_unwind));
+                  out.push(flag);
+                  return out.join("\n");
+                }
                 // same guard as scripts/23: a share is shown only when the
                 // total isn't a small residual of offsetting parts
-                const m = mk[i], h = ha[i], gross = Math.abs(m) + Math.abs(h);
-                const share = m != null && m + h > 0 && m + h >= 0.5 * gross
-                  ? "Day-one share of value creation to date: " + (100 * m / (m + h)).toFixed(0) + "%" : "";
+                const m = mk[i], a = (ha[i] || 0) + (ra[i] || 0), gross = Math.abs(m) + Math.abs(a);
+                const share = m != null && m + a > 0 && m + a >= 0.5 * gross
+                  ? "Day-one share of value creation to date: " + (100 * m / (m + a)).toFixed(0) + "%" : "";
                 return [share, "this period: " + flag].filter(Boolean).join("\n");
               },
             },
@@ -672,8 +723,17 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   const vcRows = vc.cumulative.map(r => Object.assign({}, r, {
     label: labelByTicker[r.ticker] || r.ticker,
     recon: compCount(r.ticker) ? usableCount(r.ticker) + "/" + compCount(r.ticker) : "—",
-    cum_total: r.cum_markup == null ? null : r.cum_markup + r.cum_held,
+    cum_total: r.cum_markup == null ? null : r.cum_markup + r.cum_appreciation,
   }));
+  // N-PORT realized over the periods both sources cover, vs the statements
+  const nportCell = c => {
+    const r = c.getRow().getData();
+    if (!r.nport_periods) return "—";
+    const s = r.cum_stmt_realized_nport_periods, n = r.cum_nport_realized;
+    const ok = Math.abs(n - s) <= Math.max(0.05 * Math.abs(s), 1e6);
+    return fmtSM(n) + (ok ? ' <span style="color:var(--text-faint)">✓</span>'
+      : ' <span style="color:var(--accent)" title="statements: ' + fmtSM(s) + '">≠ ' + fmtSM(s) + "</span>");
+  };
   mkTable("tbl-vc", {
     data: vcRows, height: "520px",
     initialSort: [{column: "cum_total", dir: "desc"}],
@@ -692,12 +752,12 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
         headerTooltip: "Periods passing the ±15% reconciliation gate ÷ periods where the split could be computed"}),
       numCol("Day-one markup", "cum_markup", fmtSM, {minWidth: 108,
         headerTooltip: "Cumulative fair value over cost on newly appearing secondary purchases"}),
-      numCol("Held appreciation", "cum_held", fmtSM, {minWidth: 124,
-        headerTooltip: "Cumulative mark movement on positions held across both period-ends, net of follow-ons and returns of capital"}),
+      numCol("Appreciation — unrealized", "cum_held", fmtSM, {minWidth: 124,
+        headerTooltip: "Cumulative mark movement on holdings kept across both period-ends, net of follow-ons and returns of capital — what is still on the books"}),
+      numCol("Appreciation — realized", "cum_realized_apprec", fmtSM, {minWidth: 116,
+        headerTooltip: "The fund's realized gains less the paper gain it had already booked on holdings it exited (counted as appreciation while unrealized)"}),
       numCol("Value creation", "cum_total", fmtSM, {minWidth: 104,
-        headerTooltip: "Day-one markup + held appreciation"}),
-      numCol("Realized (unwound)", "cum_realized", fmtSM, {minWidth: 112,
-        headerTooltip: "Appreciation already counted above that later left the unrealized bucket on exits — shown separately to avoid double counting"}),
+        headerTooltip: "Day-one markup + appreciation (unrealized and realized) = the fund's total investment gain over the window"}),
       numCol("Day-one share", "markup_share_of_total", null, {minWidth: 96,
         headerTooltip: "Day-one markup ÷ value creation",
         formatter: c => {
@@ -705,26 +765,54 @@ fetch("./secondaries.json", {cache: "no-store"}).then(r => r.json()).then(d => {
           return v == null ? "" :
             '<span style="color:var(--accent);font-weight:600">' + (v * 100).toFixed(1) + "%</span>";
         }}),
+      numCol("Realized gains (fund)", "cum_realized_gain", fmtSM, {minWidth: 112,
+        headerTooltip: "Realized gains on investments from the fund's statements of operations (N-PORT where no statement covers the period)",
+        formatter: c => {
+          const r = c.getRow().getData();
+          return r.cum_realized_gain == null ? "" : fmtSM(r.cum_realized_gain) +
+            (r.realized_missing ? ' <span style="color:var(--accent)" title="' + r.realized_missing +
+              ' period(s) without a realized figure">*</span>' : "");
+        }}),
+      col("N-PORT check", "cum_nport_realized", {minWidth: 120, hozAlign: "right", cssClass: "num",
+        headerTooltip: "Realized gains the fund reported in N-PORT (Item B.5) over the same periods: ✓ within 5% of the statements, ≠ shows the statements' figure",
+        formatter: nportCell}),
     ],
   });
 
   const flagN = {};
   vc.periods.forEach(r => { flagN[r.flag] = (flagN[r.flag] || 0) + 1; });
   const nComp = vc.periods.filter(r => r.new_markup != null).length;
+  const launches = vc.periods.filter(r => r.launch_date);
+  const nLaunchSplit = launches.filter(r => r.new_markup != null).length;
+  const carried = launches.filter(r => r.carried_in_unrealized != null).map(r => r.ticker);
   document.getElementById("vc-footnote").textContent =
-    "Reconciliation status: per period, day-one markup + held appreciation − unwound must land " +
-    "within ±15% of the statement of operations' change in unrealized appreciation " +
-    "(FX forwards, deferred taxes and expense noise sit outside the position panel). " +
+    "Reconciliation status: per period, day-one markup + still-unrealized appreciation − the paper " +
+    "gain on exited holdings must land within ±15% of the statement of operations' change in unrealized " +
+    "appreciation (FX forwards, deferred taxes and expense noise sit outside the position panel). " +
     "Of " + vc.periods.length + " fund-periods, " + nComp + " are computable" +
-    (flagN.bridged ? " (" + flagN.bridged + " of them 12-month splits that bridge a half-year whose " +
-      "report lacks per-position cost, reconciled against both halves' statements)" : "") + "; " +
+    (flagN.bridged ? " (" + flagN.bridged + " of them " +
+      (flagN.bridged === 1 ? "a 12-month split that bridges" : "12-month splits that bridge") +
+      " a half-year whose report lacks per-position cost, reconciled against both halves' statements)" : "") + "; " +
     ((flagN.ok || 0) + (flagN.ok_small || 0)) + " pass the gate (" + (flagN.ok_small || 0) +
     " via the small-statement absolute test) and " + (flagN.recon_miss || 0) +
     " miss it — misses are excluded from the per-period chart but included in the cumulative chart and table. " +
+    (launches.length ? launches.length + " funds' first report covers their launch: " + nLaunchSplit +
+      " of these launch periods split as new purchases, reconciled against the statement that runs from " +
+      "the commencement of operations" + (carried.length ? " (" + carried.join(", ") + ": a predecessor's " +
+      "book carried in by reorganization counts only for its appreciation since the transfer)" : "") +
+      ", and the rest await per-position cost. " : "") +
     "Not computable: " + (flagN.na_cost || 0) + " periods with cost disclosed for under 70% of " +
-    "fair value, " + (flagN.first_period || 0) + " first-coverage periods. “Value creation” " +
-    "= day-one markup + held appreciation; realized (unwound) is appreciation those totals already " +
-    "counted that later converted to realized on exits, shown separately to avoid double counting.";
+    "fair value, " + (flagN.first_period || 0) + " coverage starts (first reports of funds that " +
+    "launched earlier, so new buys can't be told from older holdings). " +
+    "Realized appreciation = the fund's reported realized gain on investments (statement of " +
+    "operations; N-PORT where no statement covers the period) less the paper gain its exited holdings " +
+    "already carried, which was counted as appreciation while unrealized. So “value creation” is the " +
+    "fund's total investment gain, realized and unrealized. N-PORT check: Item B.5's monthly realized " +
+    "gains over the same periods. Most funds match their statements; where they don't, the funds' own " +
+    "filings disagree — some reclassify distributions between gain and return of capital at year end " +
+    "(total gain unchanged), APMF's N-PORT runs 2–3× its statements, and FLEX books capital-gain " +
+    "distributions outside N-PORT's realized line. Renamed holdings are paired with their old names " +
+    "(same acquisition date, matching cost or name), so a rename is not booked as an exit plus a new purchase.";
 
   // ================= secondary pricing ======================================
   // Everything in this section is computed in the page from pr.entries (one
