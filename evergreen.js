@@ -99,6 +99,40 @@ const segsOf = t => {
   return long.length ? long : all;
 };
 
+// What's new. Script 37 dates every month with the day it first appeared on
+// the published page (cols.added) and the day its values last changed
+// (cols.revised), from the deploy repo's history (scripts/published_dates.py);
+// D.publishes lists the recent publishes, oldest first. The reader picks the
+// cutoff; a month added or revised on or after it is marked. Dates are ISO
+// days, so plain string comparison orders them.
+const VISIT_KEY = "evergreen.lastVisit";
+let NEW_SINCE = null;
+let PREV_VISIT = null;
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayIso = () => isoDay(new Date());
+const daysAgoIso = n => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
+const lastPublish = () => {
+  const pubs = D.publishes || [];
+  return pubs.length ? pubs[pubs.length - 1].date : null;
+};
+// Publish dates are days, so "since my last visit" includes the day of that
+// visit: it may re-mark something already seen that day, never miss one.
+function cutoffFor(choice) {
+  if (choice === "none") return null;
+  if (choice === "visit" && PREV_VISIT) return PREV_VISIT;
+  if (choice === "7" || choice === "30") return daysAgoIso(Number(choice) - 1);
+  return lastPublish();                 // "the last update" (and visit fallback)
+}
+const isNew = day => !!(NEW_SINCE && day && day >= NEW_SINCE);
+const addedNote = (added, revised) => {
+  if (!added) return "";
+  const first = added === D.page_launched
+    ? `On this page since it launched, ${longDay(added)}` : `Added to this page ${longDay(added)}`;
+  return first + (revised ? ` · values revised ${longDay(revised)}` : "");
+};
+// The day a fund last gained or changed a month, and whether that is new.
+const fundUpdated = f => [f.last_added, f.last_revised].filter(Boolean).sort().pop() || null;
+
 // Deliberately NOT calling app.js's paintRefreshDate(): it reads data-core.json
 // and would race this page's own header label to "Financials through …". The
 // EDGAR refresh date is not this tab's coverage date — these funds publish on
@@ -111,6 +145,7 @@ fetch("./evergreen.json", {cache: "no-store"})
   })
   .then(d => {
     D = d;
+    initWhatsNew();
     meta(); stats(); initMatrix(); overviewTable(); initPickers(); initViews();
     initWatchlist(); renderFund(); renderClasses(); renderStatements();
     const requestedView = location.hash.slice(1);
@@ -127,7 +162,8 @@ fetch("./evergreen.json", {cache: "no-store"})
 function meta() {
   const el = document.getElementById("refresh-meta");
   if (el) el.textContent = `Monthly filing scrape through ${month(D.data_through)}`
-    + (D.built ? ` · built ${D.built}` : "");
+    + (D.built ? ` · built ${D.built}` : "")
+    + (lastPublish() ? ` · last update ${longDay(lastPublish())}` : "");
 }
 
 function stats() {
@@ -203,11 +239,15 @@ function matrixCell(value, metric, seg, i, src) {
       ? `${effective ? `effective ${effective} · ` : ""}${SUBS_NOTE}`
       : metric === "reported_redemptions_m" && value != null ? REDEEM_NOTE : "";
   const srcNote = src && i === c.asof.length - 1 ? ` · ${srcTitle(src)}` : "";
-  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}${srcNote}`;
+  const added = (c.added || [])[i], revised = (c.revised || [])[i];
+  const dated = addedNote(added, revised);
+  const title = `${c.asof[i]} · ${status}${note ? ` · ${note}` : ""}${(c.data_note || [])[i] ? ` · ${c.data_note[i]}` : ""}${dated ? ` · ${dated}` : ""}${srcNote}`;
   const provisionalFlow = metric.startsWith("flow")
     && (c.flow_status || [])[i] === "provisional_aum_rollforward" && value != null;
+  const fresh = value != null && isNew(added) ? "matrix-new"
+    : value != null && isNew(revised) ? "matrix-revised" : "";
   const classes = [valueClass, provisional || provisionalFlow ? "matrix-provisional" : "",
-                   value == null ? "matrix-missing" : ""]
+                   value == null ? "matrix-missing" : "", fresh]
     .filter(Boolean).join(" ");
   return `<td class="${classes}" title="${esc(title)}">${formatted}</td>`;
 }
@@ -269,7 +309,7 @@ function renderMatrix() {
           ? `<span class="badge scraped">${f.n_scraped_months} auto-read</span>` : "";
         body += `<td class="matrix-fund-cell" rowspan="${metrics.length}">`
           + `<span class="matrix-manager">${esc(managerName(managerKeyValue))}</span>`
-          + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${scraped}${provisional}`
+          + `<b>${esc(f.ticker)}</b> · ${esc(seg.ccy)}${newBadge(f)}${scraped}${provisional}`
           + `<span class="matrix-fund-name">${esc(f.legal_name || "")}</span>`
           + (src ? `<span class="matrix-source" title="${esc(srcTitle(src))}">${srcLine(src)}</span>` : "")
           + `</td>`;
@@ -292,7 +332,7 @@ function renderMatrix() {
 }
 
 function overviewTable() {
-  const head = ["Fund", "Strategy", "Ccy", "Latest", "NAV / share",
+  const head = ["Fund", "Strategy", "Ccy", "Latest", "Updated", "NAV / share",
                 "Fund size", "Flow est. (mo)", "Flow est. (TTM)", "Return (TTM)",
                 "Months", "From"];
   let h = "<tr>" + head.map(c => `<th>${c}</th>`).join("") + "</tr>";
@@ -310,7 +350,7 @@ function overviewTable() {
     const scraped = f.n_scraped_months
       ? `<span class="badge scraped" title="Read automatically from the manager's own monthly publication. Each value links to the document it came from.">${f.n_scraped_months} auto-read</span>`
       : "";
-    h += "<tr>"
+    h += `<tr${isNew(fundUpdated(f)) ? ' class="row-new"' : ""}>`
       + `<td><a href="#" data-goto="${esc(f.ticker)}">${esc(f.ticker)}</a>${withheld}${scraped}${provisional}<div class="sub" `
       + `style="font-size:11px;color:var(--text-faint)">${esc(f.legal_name || "")}</div></td>`
       + `<td style="text-align:left">${esc(f.strategy || "·")}</td>`
@@ -320,6 +360,7 @@ function overviewTable() {
         ? `<div class="src-line">${esc(f.latest_source.short || f.latest_source.label)} · ${esc(srcDate(f.latest_source))}</div>`
         : "")
       + `</td>`
+      + `<td title="${esc(updatedTitle(f))}">${fundUpdated(f) ? esc(longDay(fundUpdated(f))) : "·"}${newBadge(f)}</td>`
       + `<td${f.latest_navps_month && f.latest_navps_month !== f.latest_month
           ? ` title="NAV per share as of ${esc(f.latest_navps_month)}"` : ""}>`
       + `${f.latest_navps == null ? "·" : sym(f.ccy) + num(f.latest_navps)}</td>`
@@ -339,7 +380,9 @@ function overviewTable() {
   }
   const tbl = document.getElementById("tbl-funds");
   tbl.innerHTML = h;
-  tbl.addEventListener("click", ev => {
+  // onclick, not addEventListener: this table is redrawn when the what's-new
+  // cutoff changes, and a second listener would navigate twice.
+  tbl.onclick = ev => {
     const a = ev.target.closest("[data-goto]");
     if (!a) return;
     ev.preventDefault();
@@ -347,7 +390,7 @@ function overviewTable() {
     FUND = a.dataset.goto; SEG = 0;
     paintCcyPicker(); renderFund();
     showView("fund");
-  });
+  };
 
   const multi = D.funds.filter(f => f.currencies.length > 1);
   document.getElementById("fn-overview").innerHTML =
@@ -512,11 +555,20 @@ function monthTable(seg) {
   if (redeem) head.push(`<span title="${esc(REDEEM_NOTE)}">Redemptions (reported)</span>`);
   const reviewed = (c.flow_status || []).some(Boolean);
   if (reviewed) head.push("External capital flow (est.)", "Sources & qualification");
+  const dated = (c.added || []).some(Boolean);
+  if (dated) head.splice(1, 0, `<span title="The day this month first appeared on this page; a later revision of its values is noted under it">Added</span>`);
   let h = "<tr>" + head.map(x => `<th>${x}</th>`).join("") + "</tr>";
   // Newest first: the recent months are what a reader checks.
   for (let i = c.asof.length - 1; i >= 0; i--) {
-    h += "<tr>"
+    const added = (c.added || [])[i], revised = (c.revised || [])[i];
+    const fresh = isNew(added) ? "row-new" : isNew(revised) ? "row-revised" : "";
+    h += `<tr${fresh ? ` class="${fresh}"` : ""}>`
       + `<td>${month(c.asof[i])}</td>`
+      + (dated ? `<td class="added-cell" title="${esc(addedNote(added, revised))}">`
+        + `${added ? (added === D.page_launched ? "at launch" : esc(longDay(added))) : "·"}`
+        + (isNew(added) ? `<span class="badge new">new</span>` : "")
+        + (revised ? `<div class="sub">revised ${esc(longDay(revised))}${isNew(revised) && !isNew(added) ? '<span class="badge updated">revised</span>' : ""}</div>` : "")
+        + `</td>` : "")
       + `<td>${c.navps[i] == null ? "·" : sym(ccy) + num(c.navps[i])}</td>`
       + `<td class="${cls(c.ret[i])}">${pctSigned(c.ret[i])}</td>`
       + `<td>${money(c.size[i], ccy)}</td>`
@@ -679,6 +731,86 @@ function renderStatements() {
       + "</tr>";
   }
   document.getElementById("tbl-statements").innerHTML = h;
+}
+
+function newBadge(f) {
+  if (isNew(f.last_added)) return `<span class="badge new" title="${esc(updatedTitle(f))}">new</span>`;
+  if (isNew(f.last_revised)) return `<span class="badge updated" title="${esc(updatedTitle(f))}">revised</span>`;
+  return "";
+}
+
+function updatedTitle(f) {
+  const parts = [];
+  if (f.last_added) parts.push(f.last_added === D.page_launched
+    ? `All months on this page since it launched, ${longDay(f.last_added)}`
+    : `Newest month added ${longDay(f.last_added)}`);
+  if (f.last_revised) parts.push(`values last revised ${longDay(f.last_revised)}`);
+  return parts.join(" · ");
+}
+
+function initWhatsNew() {
+  const box = document.getElementById("whats-new");
+  if (!box) return;
+  if (!D.published_dates) { box.hidden = true; return; }
+  try {
+    PREV_VISIT = localStorage.getItem(VISIT_KEY);
+    localStorage.setItem(VISIT_KEY, todayIso());
+  } catch (_) { PREV_VISIT = null; }
+  const pick = document.getElementById("new-since");
+  let saved = null;
+  try { saved = localStorage.getItem("evergreen.newSince"); } catch (_) { saved = null; }
+  if (saved && [...pick.options].some(o => o.value === saved)) pick.value = saved;
+  if (!PREV_VISIT) pick.querySelector('option[value="visit"]').textContent = "my last visit (first visit: last update)";
+  NEW_SINCE = cutoffFor(pick.value);
+  pick.addEventListener("change", () => {
+    try { localStorage.setItem("evergreen.newSince", pick.value); } catch (_) { /* per-viewer convenience only */ }
+    NEW_SINCE = cutoffFor(pick.value);
+    renderWhatsNew(); renderMatrix(); overviewTable(); renderFund();
+  });
+  box.addEventListener("click", ev => {
+    const a = ev.target.closest("[data-goto]");
+    if (!a) return;
+    ev.preventDefault();
+    document.getElementById("fund-pick").value = a.dataset.goto;
+    FUND = a.dataset.goto; SEG = 0;
+    paintCcyPicker(); renderFund();
+    showView("fund");
+  });
+  renderWhatsNew();
+}
+
+function renderWhatsNew() {
+  const list = document.getElementById("whats-new-list");
+  const pubs = [...(D.publishes || [])].reverse();          // newest first
+  const shown = NEW_SINCE ? pubs.filter(p => p.date >= NEW_SINCE) : [];
+  const months = (byFund, max = 6) => {
+    const names = Object.keys(byFund);
+    const parts = names.slice(0, max).map(t => {
+      const ms = byFund[t];
+      const what = ms.length === 1 ? longMonth(ms[0]) : `${ms.length} months, ${month(ms[0])} to ${month(ms[ms.length - 1])}`;
+      return `<a href="#" data-goto="${esc(t)}">${esc(t)}</a> ${esc(what)}`;
+    });
+    const more = names.length - max;
+    return parts.join(" · ") + (more > 0 ? ` · and ${more} more fund${more > 1 ? "s" : ""}` : "");
+  };
+  const line = p => {
+    const nA = Object.values(p.added).reduce((a, m) => a + m.length, 0);
+    const nR = Object.values(p.revised).reduce((a, m) => a + m.length, 0);
+    return `<li><b>${esc(longDay(p.date))}</b>`
+      + (nA ? ` — added ${nA} month${nA > 1 ? "s" : ""}: ${months(p.added)}` : "")
+      + (nR ? `${nA ? ";" : " —"} revised ${nR} month${nR > 1 ? "s" : ""}: ${months(p.revised, 4)}` : "")
+      + "</li>";
+  };
+  const last = lastPublish();
+  if (!NEW_SINCE) {
+    list.innerHTML = `<p class="wn-none">Not marking changes. Last update ${last ? esc(longDay(last)) : "·"}.</p>`;
+  } else if (!shown.length) {
+    list.innerHTML = `<p class="wn-none">Nothing added or revised since ${esc(longDay(NEW_SINCE))}. `
+      + `The last update was ${last ? esc(longDay(last)) : "·"}`
+      + (pubs.length ? `:</p><ul>${line(pubs[0])}</ul>` : ".</p>");
+  } else {
+    list.innerHTML = `<ul>${shown.map(line).join("")}</ul>`;
+  }
 }
 
 function showView(name) {
