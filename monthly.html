@@ -357,12 +357,17 @@
       }
     });
 
+    // The slots are generic buckets: a fund with its own class table (TPOP's
+    // Class I sits in slot t, its Class S in slot e) publishes the real names.
+    const labels = (data.class_labels || {})[ticker] || {};
+    const navTitle = c => `NAV/sh ${labels[c] || c.toUpperCase()}`;
     const candidate = [
       ['as_of_date',                 'Month-end',          'date'],
-      ['nav_per_share_class_i',      'NAV/sh I',           'usd'],
-      ['nav_per_share_class_s',      'NAV/sh S',           'usd'],
-      ['nav_per_share_class_d',      'NAV/sh D',           'usd'],
-      ['nav_per_share_class_t',      'NAV/sh T',           'usd'],
+      ['nav_per_share_class_i',      navTitle('i'),        'usd'],
+      ['nav_per_share_class_s',      navTitle('s'),        'usd'],
+      ['nav_per_share_class_d',      navTitle('d'),        'usd'],
+      ['nav_per_share_class_t',      navTitle('t'),        'usd'],
+      ...(labels.e ? [['nav_per_share_class_e', navTitle('e'), 'usd']] : []),
       ['aggregate_nav_usd',          'Aggregate NAV',      'money'],
       ['total_debt_usd',             'Total debt',         'money'],
       ['leverage_ratio',             'Leverage',           'ratio'],
@@ -397,6 +402,11 @@
   // runs on fund/filter changes — an explicit metric pick is never overridden.
   function autoMetric() {
     const metricSel = document.getElementById('metric');
+    const labels = (data.class_labels || {})[tickerSel.value] || {};
+    for (const c of ['i', 's', 'd']) {
+      const o = metricSel.querySelector(`option[value="nav_per_share_class_${c}"]`);
+      if (o) o.textContent = `NAV per share — Class ${labels[c] || c.toUpperCase()}`;
+    }
     const rows = byTicker.get(tickerSel.value) || [];
     const has = m => rows.some(r => valueOf(r, m) != null);
     if (has(metricSel.value)) return;
