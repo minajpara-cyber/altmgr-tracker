@@ -209,7 +209,7 @@
     </div>
     <div class="legend">
       <span class="legend-chip"><span class="dot legend-q"></span>Q = 10-Q quarterly</span>
-      <span class="legend-chip"><span class="dot legend-derived"></span>derived Q4 = computed from 10-K minus Q1+Q2+Q3</span>
+      <span class="legend-chip"><span class="dot legend-derived"></span>derived = the 10-K's full year minus the three quarters before it (Q4, or Q3 for a September year end)</span>
       <span class="legend-chip"><span class="dot legend-h"></span>H/FY = semi-annual or full-year (N-CSR)</span>
     </div>
     <div class="qtable-wrap">
@@ -347,7 +347,7 @@
   // Header row: empty corner + quarter labels
   let html = '<thead><tr><th class="row-label">Metric \\ Period</th>';
   for (const q of quarters) {
-    const cls = q.source_form === 'derived-Q4' ? 'qhead derived'
+    const cls = (q.source_form || '').startsWith('derived-') ? 'qhead derived'
               : q.period_type === 'H' ? 'qhead semi'
               : q.period_type === 'FY' ? 'qhead annual'
               : 'qhead';
@@ -423,7 +423,7 @@
             text = fmtInt(v);
           }
         }
-        if (q.source_form === 'derived-Q4') cls += ' derived';
+        if ((q.source_form || '').startsWith('derived-')) cls += ' derived';
         // Interpolated fee/expense cells: when quarterize splits H1/FY
         // cumulative values across quarters (NAV-weighted), flag the cell
         // with an "interp" superscript and tinted background so users see
