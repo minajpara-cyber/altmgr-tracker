@@ -527,6 +527,8 @@
     const SRC_LABELS = {
       factsheet_grid: 'manager factsheet track record (lead class, net)',
       factsheet: 'manager factsheet (stated MTD)',
+      'N-PORT': 'N-PORT Item B.5 (lead share class)',
+      'N-PORT, corrected': 'N-PORT, corrected from the fund’s reports',
     };
     const srcs = [...new Set(mrows.map(r => r.monthly_return_src).filter(Boolean))]
       .map(s => SRC_LABELS[s] || s);

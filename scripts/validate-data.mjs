@@ -43,6 +43,17 @@ check(latestTotal > 0, 'Latest universe NAV total is zero');
 const buildDate = core.generated_at?.slice(0, 10);
 for (const row of monthly.monthly || []) {
   check(!buildDate || row.as_of_date <= buildDate, `${row.ticker} ${row.as_of_date}: future monthly observation`);
+  // N-PORT's month fields (10_extract_nport). A row without one leaves the key out.
+  if (row.nport_return_high_pct != null) {
+    check(row.nport_return_low_pct != null && row.nport_return_low_pct <= row.nport_return_high_pct,
+      `${row.ticker} ${row.as_of_date}: class range ${row.nport_return_low_pct} to ${row.nport_return_high_pct}`);
+    check(row.nport_return_classes >= 2, `${row.ticker} ${row.as_of_date}: a class range needs two records`);
+  }
+  for (const key of ['nport_realized_gain', 'nport_unrealized_change', 'nport_deriv_realized_gain', 'nport_deriv_unrealized_change', 'nport_total_gain']) {
+    check(row[key] == null || Number.isFinite(row[key]), `${row.ticker} ${row.as_of_date}: ${key} is not a number`);
+  }
+  check(row.nport_net_assets == null || row.nport_net_assets >= 0, `${row.ticker} ${row.as_of_date}: negative net assets`);
+  check(row.nport_total_gain == null || row.source?.includes('NPORT'), `${row.ticker} ${row.as_of_date}: N-PORT gain on a row without N-PORT`);
 }
 for (let i = 1; i < (filings.filings || []).length; i++) {
   check(filings.filings[i - 1].filing_date >= filings.filings[i].filing_date, 'Filings are not newest-first');

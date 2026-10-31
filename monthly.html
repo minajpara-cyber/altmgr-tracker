@@ -44,8 +44,8 @@
     nt-REITs that skip monthly 8-Ks (BREIT, ARIS, Brookfield REIT) declare
     each month's per-class NAV in 424B3 pricing supplements. Interval
     and tender-offer funds disclose monthly subscriptions, DRIP, redemptions,
-    and monthly total return in their NPORT-P filings. This view consolidates
-    all three sources.
+    total return by share class, and realized and unrealized gains in their
+    NPORT-P filings. This view consolidates all three sources.
   </p>
 
   <div class="stat-row" id="stat-row">
@@ -82,9 +82,20 @@
           <option value="nav_per_share_class_d">NAV per share — Class D</option>
           <option value="aggregate_nav_usd">Aggregate NAV ($)</option>
           <option value="portfolio_fair_value_usd">Portfolio fair value ($)</option>
+          <option value="nport_net_assets">Net assets, quarter-end (N-PORT)</option>
         </optgroup>
         <optgroup label="Returns (%)">
           <option value="monthly_return_pct">Monthly return %</option>
+          <option value="nport_return_high_pct">Highest class return % (N-PORT)</option>
+          <option value="nport_return_low_pct">Lowest class return % (N-PORT)</option>
+        </optgroup>
+        <optgroup label="Gains and losses, as filed in N-PORT ($)">
+          <option value="gains_stacked">Realized and unrealized, stacked</option>
+          <option value="nport_total_gain">Total net gain (realized + unrealized)</option>
+          <option value="nport_realized_gain">Net realized gain, investments</option>
+          <option value="nport_unrealized_change">Change in unrealized, investments</option>
+          <option value="nport_deriv_realized_gain">Net realized gain, derivatives</option>
+          <option value="nport_deriv_unrealized_change">Change in unrealized, derivatives</option>
         </optgroup>
         <optgroup label="Distributions ($/share)">
           <option value="dist_net_class_i">Distribution net — Class I</option>
@@ -103,10 +114,12 @@
 
   <h2 id="chart-title" style="margin-top:8px"></h2>
   <div class="chart-wrap"><canvas id="mChart"></canvas></div>
+  <div class="chart-hint" id="nport-note"></div>
 
   <h2 style="margin-top:24px">Data table</h2>
   <div class="chart-hint">Every monthly observation for the selected fund. Scroll horizontally for additional columns.</div>
   <div id="monthly-table"></div>
+  <div class="chart-hint" id="nport-left-out"></div>
 </main>
 
 <footer class="sitefoot">
@@ -211,17 +224,30 @@
   function isMoney(metric) {
     return metric.includes('_usd') || metric === 'cash_subscriptions'
         || metric === 'drip' || metric === 'redemptions' || metric === 'net_flow'
-        || metric === 'subs_best';
+        || metric === 'subs_best' || metric === 'gains_stacked'
+        || (metric.startsWith('nport_') && !isPct(metric));
   }
   function isPerShareDollar(metric) {
     return metric.startsWith('nav_per_share_') || metric.startsWith('dist_');
   }
   function isPct(metric) {
-    return metric === 'monthly_return_pct';
+    return metric === 'monthly_return_pct' || metric.startsWith('nport_return_');
   }
   function isRatio(metric) {
     return metric === 'leverage_ratio';
   }
+
+  // N-PORT's monthly gains by what they come from. Each is a line the fund
+  // filed, except derivatives, which adds its two together to keep the stack
+  // readable; the table has them apart.
+  const GAIN_PARTS = [
+    {label: 'Realized, investments', color: '#1f5fa6', value: r => r.nport_realized_gain ?? null},
+    {label: 'Unrealized, investments', color: '#d58a16', value: r => r.nport_unrealized_change ?? null},
+    {label: 'Derivatives, realized + unrealized', color: '#7b3f99', value: r => {
+      const a = r.nport_deriv_realized_gain ?? null, b = r.nport_deriv_unrealized_change ?? null;
+      return a == null && b == null ? null : (a || 0) + (b || 0);
+    }},
+  ];
 
   function metricLabel(metric) {
     const opt = document.querySelector(`#metric option[value="${metric}"]`);
@@ -242,6 +268,10 @@
       const red = row.redemptions || 0;
       if (row.cash_subscriptions == null && row.drip == null && row.redemptions == null) return null;
       return subs + drip - red;
+    }
+    if (metric === 'gains_stacked') {
+      const parts = GAIN_PARTS.map(p => p.value(row)).filter(v => v != null);
+      return parts.length ? parts.reduce((a, b) => a + b, 0) : null;
     }
     const v = row[metric];
     return (v === null || v === undefined) ? null : v;
@@ -265,7 +295,7 @@
       if (isPct(metric)) return v.toFixed(2) + '%';
       if (isRatio(metric)) return v.toFixed(2) + 'x';
       if (isPerShareDollar(metric)) return '$' + v.toFixed(2);
-      if (isMoney(metric)) return '$' + (v / 1e6).toLocaleString('en-US', {maximumFractionDigits: 0}) + 'M';
+      if (isMoney(metric)) return (v < 0 ? '-$' : '$') + Math.abs(v / 1e6).toLocaleString('en-US', {maximumFractionDigits: 0}) + 'M';
       return String(v);
     };
   }
@@ -283,13 +313,16 @@
     const values = rows.map(r => valueOf(r, metric));
     const allNull = values.every(v => v == null);
 
-    const ctx = document.getElementById('mChart').getContext('2d');
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
+    // The stacked view gets a bar per month, with a part left out where the
+    // fund has none (most have no derivatives).
+    const stacked = metric === 'gains_stacked';
+    const datasets = stacked
+      ? GAIN_PARTS.filter(p => rows.some(r => p.value(r))).map(p => ({
+          label: p.label,
+          data: rows.map(p.value),
+          backgroundColor: p.color,
+        }))
+      : [{
           label: `${ticker} — ${metricLabel(metric)}`,
           data: values,
           borderColor: '#1f5fa6',
@@ -298,17 +331,22 @@
           tension: 0.2,
           pointRadius: 2.5,
           spanGaps: true,
-        }],
-      },
+        }];
+
+    const ctx = document.getElementById('mChart').getContext('2d');
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: stacked ? 'bar' : 'line',
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: false },
+          legend: { display: stacked },
           tooltip: {
             callbacks: {
-              label: (c) => `${c.parsed.y == null ? '—' : fmtValue(c.parsed.y, metric)}`,
+              label: (c) => `${stacked ? c.dataset.label + ': ' : ''}${c.parsed.y == null ? '—' : fmtValue(c.parsed.y, metric)}`,
             }
           },
           title: {
@@ -319,8 +357,9 @@
           }
         },
         scales: {
-          x: { ticks: { autoSkip: true, maxRotation: 0, font: { size: 10 } } },
+          x: { stacked, ticks: { autoSkip: true, maxRotation: 0, font: { size: 10 } } },
           y: {
+            stacked,
             ticks: { callback: yAxisCallback(metric), font: { size: 10 } },
             title: { display: true, text: metricLabel(metric) }
           }
@@ -331,6 +370,12 @@
     const u = uByT.get(ticker) || {};
     document.getElementById('chart-title').innerHTML =
       `${ticker} <span class="pill strat-${u.strategy||''}">${u.strategy||''}</span> — ${metricLabel(metric)}`;
+
+    const filesNport = rows.some(r => r.nport_realized_gain != null || r.nport_net_assets != null);
+    document.getElementById('nport-note').innerHTML = !filesNport ? '' :
+      'Gains, class returns and net assets marked N-PORT are as the fund filed them: unaudited, '
+      + 'and the N-CSR is the record where they differ. See <a href="./methodology.html">Methodology</a>. '
+      + ((data.nport_gain_notes || {})[ticker] || '');
   }
 
   let dataTable = null;
@@ -338,14 +383,21 @@
     const ticker = tickerSel.value;
     const rows = byTicker.get(ticker) || [];
     // Decide which columns to show based on what's populated for this ticker
+    const RETURN_SOURCE = {factsheet_grid: 'Factsheet grid', factsheet: 'Factsheet'};
     const populated = new Set();
-    for (const r of rows) for (const k in r) if (r[k] != null && r[k] !== '') populated.add(k);
+    const nonZero = new Set();
+    for (const r of rows) for (const k in r) {
+      if (r[k] != null && r[k] !== '') populated.add(k);
+      if (r[k]) nonZero.add(k);
+    }
 
-    const colDef = (field, title, type) => ({
+    const colDef = (field, title, type, extra) => ({
       title, field,
       cssClass: 'num',
       width: type === 'date' ? 110 : 105,
       headerSort: type !== 'pill',
+      headerWordWrap: true,
+      ...extra,
       formatter: (cell) => {
         const v = cell.getValue();
         if (v == null || v === '') return '<span class="muted">—</span>';
@@ -353,6 +405,7 @@
         if (type === 'usd')    return fmtUsd(v);
         if (type === 'pct')    return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
         if (type === 'ratio')  return Number(v).toFixed(2) + 'x';
+        if (type === 'src')    return RETURN_SOURCE[v] || v;
         return v;
       }
     });
@@ -379,11 +432,40 @@
       ['drip',                       'DRIP',               'money'],
       ['redemptions',                'Redemptions',        'money'],
       ['monthly_return_pct',         'Month return',       'pct'],
+      ['monthly_return_src',         'Return source',      'src'],
       ['source',                     'Source',             null],
     ];
     const cols = candidate
       .filter(([f]) => f === 'as_of_date' || f === 'source' || populated.has(f))
       .map(([f, t, ty]) => colDef(f, t, ty));
+
+    // What N-PORT adds, under a header that says so. Derivative columns show
+    // only for a fund with something in them: most print 0 in every cell.
+    const classTip = (e, cell) => {
+      const r = cell.getRow().getData();
+      return r.nport_return_records ? `All ${r.nport_return_classes} class records, as filed: ${r.nport_return_records}` : '';
+    };
+    const derivTip = (e, cell) => cell.getRow().getData().nport_deriv_detail || '';
+    const nportCols = [
+      ['nport_return_high_pct', 'Class high', 'pct', {tooltip: classTip,
+        headerTooltip: 'Highest of the month’s class returns. N-PORT’s records carry no class name.'}],
+      ['nport_return_low_pct', 'Class low', 'pct', {tooltip: classTip,
+        headerTooltip: 'Lowest of the month’s class returns. N-PORT’s records carry no class name.'}],
+      ['nport_realized_gain', 'Realized', 'money', {headerTooltip: 'Item B.5.d: net realized gain on investments other than derivatives.'}],
+      ['nport_unrealized_change', 'Unrealized', 'money', {headerTooltip: 'Item B.5.d: net change in unrealized appreciation on investments other than derivatives.'}],
+      ['nport_deriv_realized_gain', 'Deriv. realized', 'money', {tooltip: derivTip, headerTooltip: 'Item B.5.c: net realized gain on derivatives, all asset categories.'}],
+      ['nport_deriv_unrealized_change', 'Deriv. unreal.', 'money', {tooltip: derivTip, headerTooltip: 'Item B.5.c: net change in unrealized appreciation on derivatives, all asset categories.'}],
+      ['nport_total_gain', 'Total gain', 'money', {headerTooltip: 'The four lines added up: not a filed figure.'}],
+      ['nport_net_assets', 'Net assets', 'money', {headerTooltip: 'Item B.1.c, at the quarter’s report date only.'}],
+      ['nport_total_assets', 'Total assets', 'money', {headerTooltip: 'Item B.1.a, at the quarter’s report date only.'}],
+      ['nport_total_liabilities', 'Liabilities', 'money', {headerTooltip: 'Item B.1.b, at the quarter’s report date only.'}],
+    ].filter(([f]) => f.includes('_deriv_') ? nonZero.has(f) : populated.has(f))
+      .map(([f, t, ty, extra]) => colDef(f, t, ty, extra));
+    if (nportCols.length) cols.splice(cols.length - 1, 0, {title: 'N-PORT, as filed', columns: nportCols});
+
+    const leftOut = rows.filter(r => r.nport_gain_note);
+    document.getElementById('nport-left-out').innerHTML = !leftOut.length ? '' :
+      'Left out of the table: ' + leftOut.map(r => `${r.as_of_date}, ${r.nport_gain_note}`).join('. ') + '.';
 
     if (dataTable) dataTable.destroy();
     dataTable = new Tabulator('#monthly-table', {
