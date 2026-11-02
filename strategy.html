@@ -385,7 +385,8 @@
       perQuarter: (q) => {
         const iss = q.issuance_total, drip = q.drip_total, dst = q.dst_proceeds_usd;
         const rep = q.repurchases_total, dstOut = q.dst_redemptions_usd;
-        if (iss == null && drip == null && dst == null && rep == null && dstOut == null) return null;
+        // Redemptions alone are not a net (09's _net_capital).
+        if (iss == null && drip == null && dst == null) return null;
         return (iss || 0) + (drip || 0) + (dst || 0)
              - Math.abs(rep || 0) - Math.abs(dstOut || 0);
       }},

@@ -80,6 +80,7 @@
           <option value="nav_per_share_class_i">NAV per share — Class I</option>
           <option value="nav_per_share_class_s">NAV per share — Class S</option>
           <option value="nav_per_share_class_d">NAV per share — Class D</option>
+          <option value="nav_per_share_class_t">NAV per share — Class T</option>
           <option value="aggregate_nav_usd">Aggregate NAV ($)</option>
           <option value="portfolio_fair_value_usd">Portfolio fair value ($)</option>
           <option value="nport_net_assets">Net assets, quarter-end (N-PORT)</option>
@@ -485,7 +486,7 @@
   function autoMetric() {
     const metricSel = document.getElementById('metric');
     const labels = (data.class_labels || {})[tickerSel.value] || {};
-    for (const c of ['i', 's', 'd']) {
+    for (const c of ['i', 's', 'd', 't']) {
       const o = metricSel.querySelector(`option[value="nav_per_share_class_${c}"]`);
       if (o) o.textContent = `NAV per share — Class ${labels[c] || c.toUpperCase()}`;
     }
