@@ -374,8 +374,8 @@
 
     const filesNport = rows.some(r => r.nport_realized_gain != null || r.nport_net_assets != null);
     document.getElementById('nport-note').innerHTML = !filesNport ? '' :
-      'Gains, class returns and net assets marked N-PORT are as the fund filed them: unaudited, '
-      + 'and the N-CSR is the record where they differ. See <a href="./methodology.html">Methodology</a>. '
+      'Gains, class returns and net assets marked N-PORT are as the fund filed them, less what Methodology says is left out. '
+      + 'They are unaudited, and the N-CSR is the record where they differ. See <a href="./methodology.html">Methodology</a>. '
       + ((data.nport_gain_notes || {})[ticker] || '');
   }
 
@@ -444,14 +444,14 @@
     // only for a fund with something in them: most print 0 in every cell.
     const classTip = (e, cell) => {
       const r = cell.getRow().getData();
-      return r.nport_return_records ? `All ${r.nport_return_classes} class records, as filed: ${r.nport_return_records}` : '';
+      return r.nport_return_records ? `${r.nport_return_classes} class records, not counting any Methodology leaves out: ${r.nport_return_records}` : '';
     };
     const derivTip = (e, cell) => cell.getRow().getData().nport_deriv_detail || '';
     const nportCols = [
       ['nport_return_high_pct', 'Class high', 'pct', {tooltip: classTip,
-        headerTooltip: 'Highest of the month’s class returns. N-PORT’s records carry no class name.'}],
+        headerTooltip: 'Highest of the month’s class returns. N-PORT’s records carry no class name. Methodology says which records are left out.'}],
       ['nport_return_low_pct', 'Class low', 'pct', {tooltip: classTip,
-        headerTooltip: 'Lowest of the month’s class returns. N-PORT’s records carry no class name.'}],
+        headerTooltip: 'Lowest of the month’s class returns. N-PORT’s records carry no class name. Methodology says which records are left out.'}],
       ['nport_realized_gain', 'Realized', 'money', {headerTooltip: 'Item B.5.d: net realized gain on investments other than derivatives.'}],
       ['nport_unrealized_change', 'Unrealized', 'money', {headerTooltip: 'Item B.5.d: net change in unrealized appreciation on investments other than derivatives.'}],
       ['nport_deriv_realized_gain', 'Deriv. realized', 'money', {tooltip: derivTip, headerTooltip: 'Item B.5.c: net realized gain on derivatives, all asset categories.'}],
@@ -462,7 +462,7 @@
       ['nport_total_liabilities', 'Liabilities', 'money', {headerTooltip: 'Item B.1.b, at the quarter’s report date only.'}],
     ].filter(([f]) => f.includes('_deriv_') ? nonZero.has(f) : populated.has(f))
       .map(([f, t, ty, extra]) => colDef(f, t, ty, extra));
-    if (nportCols.length) cols.splice(cols.length - 1, 0, {title: 'N-PORT, as filed', columns: nportCols});
+    if (nportCols.length) cols.splice(cols.length - 1, 0, {title: 'N-PORT', columns: nportCols});
 
     const leftOut = rows.filter(r => r.nport_gain_note);
     document.getElementById('nport-left-out').innerHTML = !leftOut.length ? '' :
