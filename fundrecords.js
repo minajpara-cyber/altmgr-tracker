@@ -16,9 +16,17 @@ const fmtX = v => v == null ? "" : v.toFixed(2) + "x";
 if (typeof paintRefreshDate === "function") paintRefreshDate();
 fetch("./fundrecords.json", {cache: "no-store"}).then(r => r.json()).then(d => {
   D = d;
-  stats(); filters(); league(); watch(); trajectory(); peerBench(); agingNav(); rollups();
+  holdNotes(); stats(); filters(); league(); watch(); trajectory(); peerBench(); agingNav(); rollups();
   initTables(); initViews();
 });
+
+function holdNotes() {
+  const notes = Object.values(D.holds || {});
+  document.querySelectorAll(".fr-holds").forEach(el => {
+    el.textContent = notes.join("\n");
+    el.style.display = notes.length ? "" : "none";
+  });
+}
 
 function matrixTable(el, head, rows) {
   let h = '<table style="border-collapse:collapse;font-size:12px;' +
@@ -35,6 +43,11 @@ function matrixTable(el, head, rows) {
   document.getElementById(el).innerHTML = h + "</table>";
 }
 
+function agingExTag(prefix) {
+  const ex = (D.aging.excluded || []).map(m => D.mgr_names[m] || m).join(", ");
+  return ex ? prefix + ex : "";
+}
+
 function agingTables() {
   const scope = document.getElementById("ag-scope").value;
   const a = D.aging[scope];
@@ -48,7 +61,7 @@ function agingTables() {
               no_vintage_bn: a.unk[i]});
   });
   matrixTable("tbl-aging",
-    ["NAV by age ($bn)", "Under 6y", "6–9y", "10y+", "Total known",
+    ["NAV by age ($bn)" + agingExTag(" ex-"), "Under 6y", "6–9y", "10y+", "Total known",
      "No vintage"], rows);
   window.__agingCsv = csv;
 
@@ -129,7 +142,8 @@ function initTables() {
   mgrTable();
   document.getElementById("mg-met").addEventListener("change", mgrTable);
   document.getElementById("dl-aging").addEventListener("click", () =>
-    downloadCsv("aging_nav.csv", window.__agingCsv || []));
+    downloadCsv("aging_nav" + agingExTag("_ex_").toLowerCase() + ".csv",
+      window.__agingCsv || []));
   document.getElementById("dl-peers").addEventListener("click", () =>
     downloadCsv("peer_set.csv", window.__peerCsv || []));
   document.getElementById("dl-mgr").addEventListener("click", () =>
@@ -288,6 +302,9 @@ function drill(row) {
     (fd.vint ? '<span class="badge">vintage ' + fd.vint + '</span>' : "") +
     (fd.ccy !== "USD" ? '<span class="badge">' + fd.ccy + '</span>' : "") +
     (fd.plan ? '<span class="badge">' + fd.plan + '</span>' : "");
+  const hold = document.getElementById("drill-hold");
+  hold.textContent = (D.holds || {})[fd.m] || "";
+  hold.style.display = hold.textContent ? "" : "none";
   const labels = D.periods.slice(fd.p0, fd.p0 + fd.committed.length);
 
   charts.irr && charts.irr.destroy();

@@ -23,6 +23,8 @@
   .drift-bad { color: #b91c1c; font-weight: 600; }
   .drift-good { color: #15803d; }
   #drill-title { margin: 20px 0 4px; font-size: 15px; }
+  .fr-holds, #drill-hold { white-space: pre-line; font-size: 12.5px; line-height: 1.5; margin: 8px 0 12px;
+    padding: 8px 12px; border-left: 3px solid #b45309; background: #fdf2df; color: #1f2937; }
   .frpills { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
   .frpills button { font-family: var(--mono); font-size: 13px; padding: 7px 16px;
     border: 1px solid var(--border, #d1d5db); background: transparent;
@@ -82,7 +84,9 @@
       vintage year, USD at ECB quarter-end FX). NAV piling into 6–9 and
       10y+ funds is capital that should be coming back — it pressures
       future realized carry and the LP re-up cycle. Combined vehicles
-      without a vintage (~10% of NAV) are excluded from the split.</p>
+      without a vintage are excluded from the split. A quarter stays blank
+      until every manager in the chart has filed it.</p>
+    <p class="fr-holds" style="display:none"></p>
     <div class="controls-row">
       <label>Scope <select id="ag-scope">
         <option value="all">All strategies</option>
@@ -110,6 +114,7 @@
   </section>
 
   <section class="frview" data-view="funds">
+    <p class="fr-holds" style="display:none"></p>
     <h2>League table</h2>
     <p class="chart-hint">Every fund at its manager's latest reported
       quarter, in <b>reported-currency millions</b> (€/¥/C$ where flagged);
@@ -126,6 +131,7 @@
     <div id="tbl-frleague" class="tbl"></div>
 
     <h3 id="drill-title" style="display:none"></h3>
+    <p id="drill-hold" style="display:none"></p>
     <div class="spon-row" id="drill-row" style="display:none">
       <div class="spon-chart"><canvas id="drillIrr" height="230"></canvas>
         <p class="chart-hint">Reported since-inception IRRs by quarter.</p></div>
@@ -143,6 +149,7 @@
   </section>
 
   <section class="frview" data-view="peers">
+    <p class="fr-holds" style="display:none"></p>
     <h2>Peer benchmarking</h2>
     <p class="chart-hint">Cross-manager comparison on a normalized strategy
       axis (each manager's segment labels map to common buckets). Franchise
@@ -183,7 +190,10 @@
       in funds reporting net IRR below an 8% hurdle proxy (unlikely to be
       accruing carry). <b>Realization pace</b> = realized proceeds ÷ prior
       quarter's unrealized value, annualized — the engine of realized
-      performance fees.</p>
+      performance fees. These and IRR drift are in USD at each quarter's ECB
+      rate. Apollo and Ares restate some euro funds at each quarter-end rate,
+      so their pace, and Apollo's fundraising proxy, carry some FX.</p>
+    <p class="fr-holds" style="display:none"></p>
     <div class="spon-row">
       <div class="spon-chart"><canvas id="chBelow8" height="240"></canvas>
         <p class="chart-hint">Carry at risk: % of unrealized value in funds
@@ -227,9 +237,10 @@
     tables (invested capital, realised and remaining value and gross MOIC;
     Secondaries a quarter in arrears; CVC prints no fund sizes or IRRs
     there). 2017-Q4 onward (TPG from its 2022 IPO; Blue Owl FY2021;
-    Brookfield 2022-Q4; EQT 2019-Q3; CVC 2023-Q4, from its IPO prospectus).
-    Values as reported; EUR/JPY/CAD funds convert to USD only in
-    aggregates. Fund relabels stitched (BEP→Energy, Dyal→GP Stakes,
+    Brookfield 2023-Q1; EQT 2019-Q3; CVC 2023-Q4, from its IPO prospectus).
+    Values as reported, except figures held as noted above and family
+    totals left out; EUR/JPY/CAD funds convert to USD only in
+    aggregates and manager scorecards. Fund relabels stitched (BEP→Energy, Dyal→GP Stakes,
     TPG's Angelo Gordon dissolution, CVC's CIF→Value Add…). MOIC bases
     differ by manager (BX/CG total-value MOIC, KKR/TPG/EQT/CVC gross
     multiple, ARES/OWL gross &amp; net).
@@ -241,6 +252,6 @@
 <script src="https://unpkg.com/tabulator-tables@5.5.4/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="./app.js?v=20260714-1"></script>
-<script src="./fundrecords.js?v=20260803-17"></script>
+<script src="./fundrecords.js?v=20261102-4"></script>
 </body>
 </html>
